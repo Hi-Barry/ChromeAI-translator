@@ -26,31 +26,37 @@ jobs:
       - name: Install Chromium
         run: |
           sudo apt-get update
-          sudo apt-get install -y chromium-browser chromium-chromedriver
+          sudo apt-get install -y chromium-browser
 
       - name: Package CRX
+        env:
+          EXTENSION_KEY: ${{ secrets.CRX_KEY }}
         run: |
           EXT_DIR=$(pwd)
-          EXT_NAME="ChromeAI-translator"
           VERSION=${GITHUB_REF#refs/tags/}
+          EXT_NAME="ChromeAI-translator"
           
-          # Use chromium instead of google-chrome
-          chromium --pack-extension="$EXT_DIR" --pack-extension-key=/tmp/key.pem 2>&1 || true
+          # 1. 还原私钥文件（临时存放在 /tmp）
+          echo "$EXTENSION_KEY" > /tmp/key.pem
           
-          # If packing fails, try alternative
-          if [ ! -f "${EXT_NAME}.crx" ]; then
-            chromium --pack-extension="$EXT_DIR" 2>&1
-          fi
+          # 2. 使用 Chromium 无头模式打包
+          # 注意：--no-sandbox 是在 Docker/CI 环境运行 Chromium 的必要参数
+          chromium-browser --headless --no-sandbox --pack-extension="$EXT_DIR" --pack-extension-key=/tmp/key.pem
           
-          # Rename to match version
-          if [ -f "${EXT_NAME}.crx" ]; then
-            mv "${EXT_NAME}.crx" "${EXT_NAME}-${VERSION}.crx"
-            echo "CRX created successfully"
+          # 3. 确定打包出来的文件名（Chromium 默认以“当前文件夹名”命名产物）
+          # 我们获取当前文件夹的名称，并寻找对应的 .crx
+          CURRENT_DIR_NAME=$(basename "$EXT_DIR")
+          
+          if [ -f "../${CURRENT_DIR_NAME}.crx" ]; then
+            # 移动到当前目录并重命名
+            mv "../${CURRENT_DIR_NAME}.crx" "./${EXT_NAME}-${VERSION}.crx"
+            echo "Successfully created: ${EXT_NAME}-${VERSION}.crx"
+          elif [ -f "./${CURRENT_DIR_NAME}.crx" ]; then
+            mv "./${CURRENT_DIR_NAME}.crx" "./${EXT_NAME}-${VERSION}.crx"
+            echo "Successfully created: ${EXT_NAME}-${VERSION}.crx"
           else
-            echo "CRX creation failed"
-            ls -la *.crx 2>/dev/null || echo "No CRX files found"
-            # Try again with chrome as fallback
-            which google-chrome && google-chrome --pack-extension="$EXT_DIR"
+            echo "Error: CRX file not found. Listing files for debugging:"
+            ls -R ..
             exit 1
           fi
 
