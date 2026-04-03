@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI翻译助手 - 设置</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>🌐 AI翻译助手设置</h1>
+      <p class="subtitle">配置您的翻译API和偏好设置</p>
+    </header>
+
+    <main class="main">
+      <section class="section">
+        <h2>API 配置</h2>
+        <div class="form-group">
+          <label for="apiKey">API 密钥</label>
+          <input type="password" id="apiKey" placeholder="输入您的 OpenAI API 密钥">
+          <p class="help-text">支持 OpenAI、Azure OpenAI 等兼容 OpenAI API 格式的服务</p>
+        </div>
+
+        <div class="form-group">
+          <label for="apiBaseUrl">API Base URL</label>
+          <input type="url" id="apiBaseUrl" placeholder="https://api.openai.com/v1">
+          <p class="help-text">
+            常用服务：
+            <a href="#" class="preset-url" data-url="https://api.openai.com/v1">OpenAI官方</a> |
+            <a href="#" class="preset-url" data-url="https://api.siliconflow.cn/v1">SiliconFlow</a>
+          </p>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>模型配置</h2>
+        <div class="form-group">
+          <label for="model">模型</label>
+          <select id="model">
+            <optgroup label="OpenAI">
+              <option value="gpt-4o-mini" selected>GPT-4o-mini</option>
+              <option value="gpt-4o">GPT-4o</option>
+            </optgroup>
+            <optgroup label="SiliconFlow">
+              <option value="Qwen/Qwen3.5-4B">Qwen3.5-4B</option>
+              <option value="Pro/moonshotai/Kimi-K2.5">Kimi-K2.5</option>
+              <option value="Pro/deepseek-ai/DeepSeek-V3">DeepSeek-V3</option>
+            </optgroup>
+            <option value="custom">自定义模型</option>
+          </select>
+        </div>
+
+        <div class="form-group custom-model-group" style="display: none;">
+          <label for="customModel">自定义模型名称</label>
+          <input type="text" id="customModel" placeholder="例如: gpt-4-vision-preview">
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>翻译设置</h2>
+        <div class="form-group">
+          <label for="targetLanguage">目标语言</label>
+          <select id="targetLanguage">
+            <option value="zh-CN" selected>简体中文</option>
+            <option value="zh-TW">繁体中文</option>
+            <option value="en">English</option>
+            <option value="ja">日本語</option>
+            <option value="ko">한국어</option>
+            <option value="fr">Français</option>
+            <option value="de">Deutsch</option>
+            <option value="es">Español</option>
+            <option value="ru">Русский</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="systemPrompt">System Prompt (系统提示词)</label>
+          <textarea id="systemPrompt" rows="4" placeholder="输入自定义的翻译提示词"></textarea>
+          <p class="help-text">
+            自定义AI的翻译风格和行为。留空使用默认提示词。
+            <br>默认：你是一个专业的翻译助手。请将用户提供的文本翻译成目标语言，只返回翻译结果。
+          </p>
+        </div>
+
+        <div class="form-group form-group-checkbox">
+          <label class="checkbox-label">
+            <input type="checkbox" id="disableThinking">
+            关闭思考模式（适用于 DeepSeek 等支持思考的模型，可节省token并加快响应）
+          </label>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2>快捷键</h2>
+        <div class="shortcut-info">
+          <p><strong>Ctrl + Shift + T</strong> - 触发翻译</p>
+          <p><strong>Esc</strong> - 关闭翻译窗口</p>
+          <p class="help-text">快捷键可以在 chrome://extensions/shortcuts 中修改</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <button id="saveBtn" class="btn btn-primary">保存设置</button>
+      <button id="resetBtn" class="btn btn-secondary">重置为默认</button>
+      <div id="status" class="status"></div>
+    </footer>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

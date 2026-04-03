@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Icon Generator - Chrome翻译插件</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+    h1 { font-size: 1.2em; margin: 0 0 10px; }
+    #canvasWrap { display: inline-block; border: 1px solid #ccc; padding: 8px; border-radius: 6px; }
+    canvas { display: block; background: #fff; }
+    .controls { margin-top: 12px; }
+    .controls button { margin-right: 8px; padding: 8px 12px; font-size: 14px; }
+    .notes { margin-top: 12px; font-size: 13px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1>Icon Generator — Globe/Translation Icon</h1>
+  <p>生成一个简单的地球/翻译图标，支持导出以下尺寸的 PNG 图标：16x16、48x48、128x128。</p>
+  <div id="canvasWrap">
+    <canvas id="iconCanvas" width="512" height="512" aria-label="Icon preview"></canvas>
+  </div>
+  <div class="controls">
+    <button data-size="16">Download 16x16</button>
+    <button data-size="48">Download 48x48</button>
+    <button data-size="128">Download 128x128</button>
+  </div>
+  <div class="notes">
+    <strong>说明：</strong> 使用 Canvas API 绘制一个简单的地球图标并导出 PNG 图片。点击按钮即可下载对应尺寸的图标文件。
+  </div>
+
+  <script>
+    // Draw a simple globe/translation icon on a given canvas context sized W x H
+    function drawIconTo(ctx, W, H) {
+      ctx.clearRect(0, 0, W, H);
+      const cx = W / 2;
+      const cy = H / 2;
+      const r = Math.min(W, H) * 0.38;
+
+      // Globe base
+      ctx.lineWidth = Math.max(1, Math.round(r * 0.12));
+      ctx.strokeStyle = '#2c7be5';
+      ctx.fillStyle = 'rgba(44,123,229,0.15)';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Meridians (curved lines)
+      ctx.lineWidth = Math.max(1, Math.round(r * 0.08));
+      ctx.strokeStyle = '#2c3e50';
+      // left meridian curve
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.85, cy - r);
+      ctx.quadraticCurveTo(cx - r * 0.25, cy, cx - r * 0.85, cy + r);
+      ctx.stroke();
+      // right meridian curve
+      ctx.beginPath();
+      ctx.moveTo(cx + r * 0.85, cy - r);
+      ctx.quadraticCurveTo(cx + r * 0.25, cy, cx + r * 0.85, cy + r);
+      ctx.stroke();
+
+      // Latitudinal curves
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.75, cy - r * 0.25);
+      ctx.quadraticCurveTo(cx, cy - r * 0.9, cx + r * 0.75, cy - r * 0.25);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.75, cy + r * 0.25);
+      ctx.quadraticCurveTo(cx, cy + r * 0.9, cx + r * 0.75, cy + r * 0.25);
+      ctx.stroke();
+
+      // Translation arrow around globe
+      ctx.lineWidth = Math.max(1, Math.round(r * 0.15));
+      ctx.strokeStyle = '#1e88e5';
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * 0.68, Math.PI * 0.1, Math.PI * 1.9);
+      ctx.stroke();
+      // Arrowhead
+      const ahX = cx + Math.cos(Math.PI) * r * 0.68;
+      const ahY = cy + Math.sin(Math.PI) * r * 0.68;
+      ctx.beginPath();
+      ctx.moveTo(ahX, ahY);
+      ctx.lineTo(ahX - 12, ahY - 8);
+      ctx.lineTo(ahX - 12, ahY + 8);
+      ctx.closePath();
+      ctx.fillStyle = '#1e88e5';
+      ctx.fill();
+    }
+
+    // Export an icon PNG at the requested size
+    function exportSize(size) {
+      const off = document.createElement('canvas');
+      off.width = size;
+      off.height = size;
+      const ctx = off.getContext('2d');
+      drawIconTo(ctx, size, size);
+      const data = off.toDataURL('image/png');
+      const a = document.createElement('a');
+      a.href = data;
+      a.download = 'icon-' + size + 'x' + size + '.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const baseSize = 512;
+      const canvas = document.getElementById('iconCanvas');
+      const ctx = canvas.getContext('2d');
+      drawIconTo(ctx, baseSize, baseSize);
+
+      document.querySelectorAll('button[data-size]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const size = parseInt(btn.getAttribute('data-size'), 10);
+          exportSize(size);
+        });
+      });
+    });
+  </script>
+</body>
+</html>
