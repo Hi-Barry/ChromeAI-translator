@@ -23,12 +23,10 @@ jobs:
         with:
           node-version: '24'
 
-      - name: Install Chrome
+      - name: Install Chromium
         run: |
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
-          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
-          apt-get update
-          apt-get install -y google-chrome-stable
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser chromium-chromedriver
 
       - name: Package CRX
         run: |
@@ -36,12 +34,12 @@ jobs:
           EXT_NAME="ChromeAI-translator"
           VERSION=${GITHUB_REF#refs/tags/}
           
-          # Pack extension without key (generates unsigned crx)
-          google-chrome --pack-extension="$EXT_DIR" --pack-extension-key=/tmp/key.pem 2>&1 || true
+          # Use chromium instead of google-chrome
+          chromium --pack-extension="$EXT_DIR" --pack-extension-key=/tmp/key.pem 2>&1 || true
           
-          # If packing fails, try without key parameter
+          # If packing fails, try alternative
           if [ ! -f "${EXT_NAME}.crx" ]; then
-            google-chrome --pack-extension="$EXT_DIR" 2>&1
+            chromium --pack-extension="$EXT_DIR" 2>&1
           fi
           
           # Rename to match version
@@ -51,6 +49,8 @@ jobs:
           else
             echo "CRX creation failed"
             ls -la *.crx 2>/dev/null || echo "No CRX files found"
+            # Try again with chrome as fallback
+            which google-chrome && google-chrome --pack-extension="$EXT_DIR"
             exit 1
           fi
 
