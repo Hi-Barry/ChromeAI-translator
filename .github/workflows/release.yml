@@ -30,7 +30,7 @@ jobs:
           EXTENSION_KEY: ${{ secrets.CRX_KEY }}
         run: |
           # 1. 准备私钥
-          echo "$EXTENSION_KEY" > ./key.pem
+          echo "$EXTENSION_KEY" > ../key.pem
           
           # 获取版本号
           VERSION=${GITHUB_REF#refs/tags/}
@@ -38,7 +38,7 @@ jobs:
           
           # 2. 执行打包 (注意路径，我们直接在当前目录下打包)
           # --no-sandbox 是 CI 环境必须的
-          chromium-browser --headless --no-sandbox --pack-extension="./" --pack-extension-key="./key.pem"
+          chromium-browser --headless --no-sandbox --pack-extension="./" --pack-extension-key="../key.pem"
           
           # 3. Chromium 打包出来的文件名通常是 [当前文件夹名].crx
           # 假设你的项目文件夹在 CI 里叫 ChromeAI-translator
