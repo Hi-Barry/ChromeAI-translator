@@ -180,8 +180,6 @@ MIT License
 
 如有问题或建议，请通过以下方式联系：
 - 提交 GitHub Issue
-- 发送邮件到 [your-email@example.com]
-
 ---
 
 **注意**：本扩展需要有效的 OpenAI API 密钥或兼容服务的 API 密钥才能正常使用。API 调用可能会产生费用，请注意使用额度。
