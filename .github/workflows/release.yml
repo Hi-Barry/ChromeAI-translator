@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # 保持稳定版本
+          node-version: '20'
 
       - name: Install Chromium
         run: |
@@ -29,47 +29,52 @@ jobs:
         env:
           EXTENSION_KEY: ${{ secrets.CRX_KEY }}
         run: |
-          # 1. 准备私钥
-          echo "$EXTENSION_KEY" > ../key.pem
-          
-          # 获取版本号
+          # 1. 获取版本号和变量
           VERSION=${GITHUB_REF#refs/tags/}
           EXT_NAME="ChromeAI-translator"
+          CURRENT_DIR=$(pwd)
           
-          # 2. 执行打包 (注意路径，我们直接在当前目录下打包)
-          # --no-sandbox 是 CI 环境必须的
-          chromium-browser --headless --no-sandbox --pack-extension="./" --pack-extension-key="../key.pem"
+          # 2. 准备私钥 (存放在当前目录之外，避免 Chromium 报错 "key file included")
+          echo "$EXTENSION_KEY" > ../key.pem
           
-          # 3. Chromium 打包出来的文件名通常是 [当前文件夹名].crx
-          # 假设你的项目文件夹在 CI 里叫 ChromeAI-translator
-          # 它可能会生成在当前目录，也可能在上一级目录
+          # 3. 执行打包
+          # --no-sandbox: CI 环境运行必须
+          # --pack-extension: 指向当前源码目录
+          # --pack-extension-key: 指向刚才放在外部的私钥
+          chromium-browser --headless --no-sandbox \
+            --pack-extension="$CURRENT_DIR" \
+            --pack-extension-key="../key.pem"
           
-          EXPECTED_NAME="ChromeAI-translator.crx"
+          # 4. 寻找并重命名产物
+          # Chromium 打包后的 .crx 默认会出现在被打包文件夹的“同级目录”
+          # 假设当前目录名是 'ChromeAI-translator'，产物就是 '../ChromeAI-translator.crx'
+          DIR_BASE_NAME=$(basename "$CURRENT_DIR")
+          EXPECTED_CRX="../${DIR_BASE_NAME}.crx"
           
-          # 查找并重命名
-          if [ -f "../$EXPECTED_NAME" ]; then
-            mv "../$EXPECTED_NAME" "./${EXT_NAME}-${VERSION}.crx"
-          elif [ -f "./$EXPECTED_NAME" ]; then
-            mv "./$EXPECTED_NAME" "./${EXT_NAME}-${VERSION}.crx"
+          echo "Checking for CRX at: $EXPECTED_CRX"
+          
+          if [ -f "$EXPECTED_CRX" ]; then
+            mv "$EXPECTED_CRX" "./${EXT_NAME}-${VERSION}.crx"
+            echo "Successfully prepared: ${EXT_NAME}-${VERSION}.crx"
           else
-            # 如果还是找不到，搜索一下所有的 crx
-            FOUND_CRX=$(find . -maxdepth 2 -name "*.crx" | head -n 1)
+            echo "CRX not found at expected path. Searching in parent directory..."
+            FOUND_CRX=$(find .. -maxdepth 1 -name "*.crx" | head -n 1)
             if [ -n "$FOUND_CRX" ]; then
               mv "$FOUND_CRX" "./${EXT_NAME}-${VERSION}.crx"
+              echo "Found and moved: $FOUND_CRX"
             else
               echo "Error: Cannot find any .crx file."
-              ls -R ..
+              ls -la ..
               exit 1
             fi
           fi
-          
-          echo "Final CRX prepared: $(ls ${EXT_NAME}-${VERSION}.crx)"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          # 明确指定文件名，不要用通配符，防止找不到文件报 22 错误
-          files: ChromeAI-translator-*.crx
+          # 自动上传刚才重命名好的文件
+          files: |
+            ChromeAI-translator-*.crx
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
