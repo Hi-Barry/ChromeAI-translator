@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -18,7 +21,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install Chrome
         run: |
@@ -31,15 +34,28 @@ jobs:
         run: |
           EXT_DIR=$(pwd)
           EXT_NAME="ChromeAI-translator"
+          VERSION=${GITHUB_REF#refs/tags/}
           
-          # Pack extension (no private key = will generate new)
-          google-chrome --pack-extension="$EXT_DIR" --pack-extension-key="$EXT_DIR/key.pem"
+          # Pack extension without key (generates unsigned crx)
+          google-chrome --pack-extension="$EXT_DIR" --pack-extension-key=/tmp/key.pem 2>&1 || true
           
-          # Rename to match tag
-          mv "${EXT_DIR}/ChromeAI-translator.crx" "${EXT_NAME}-${GITHUB_REF#refs/tags/}.crx"
+          # If packing fails, try without key parameter
+          if [ ! -f "${EXT_NAME}.crx" ]; then
+            google-chrome --pack-extension="$EXT_DIR" 2>&1
+          fi
+          
+          # Rename to match version
+          if [ -f "${EXT_NAME}.crx" ]; then
+            mv "${EXT_NAME}.crx" "${EXT_NAME}-${VERSION}.crx"
+            echo "CRX created successfully"
+          else
+            echo "CRX creation failed"
+            ls -la *.crx 2>/dev/null || echo "No CRX files found"
+            exit 1
+          fi
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             ChromeAI-translator-*.crx
