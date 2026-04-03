@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
+          apt-get update
+          apt-get install -y google-chrome-stable
+
+      - name: Package CRX
+        run: |
+          EXT_DIR=$(pwd)
+          EXT_NAME="ChromeAI-translator"
+          
+          # Pack extension (no private key = will generate new)
+          google-chrome --pack-extension="$EXT_DIR" --pack-extension-key="$EXT_DIR/key.pem"
+          
+          # Rename to match tag
+          mv "${EXT_DIR}/ChromeAI-translator.crx" "${EXT_NAME}-${GITHUB_REF#refs/tags/}.crx"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            ChromeAI-translator-*.crx
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
