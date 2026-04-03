@@ -20,11 +20,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install Chromium
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser
-
       - name: Package CRX
         env:
           EXTENSION_KEY: ${{ secrets.CRX_KEY }}
@@ -34,40 +29,33 @@ jobs:
           EXT_NAME="ChromeAI-translator"
           CURRENT_DIR=$(pwd)
           
-          # 2. 准备私钥 (存放在当前目录之外，避免 Chromium 报错 "key file included")
-          echo "$EXTENSION_KEY" > ../key.pem
+          # 2. 准备私钥 (放在 /tmp 目录下最安全，完全隔离)
+          echo "$EXTENSION_KEY" > /tmp/extension_key.pem
           
           # 3. 执行打包
-          # --no-sandbox: CI 环境运行必须
-          # --pack-extension: 指向当前源码目录
-          # --pack-extension-key: 指向刚才放在外部的私钥
-          chromium-browser --headless --no-sandbox \
+          # 使用 GitHub Ubuntu 镜像内置的 google-chrome
+          google-chrome --headless --no-sandbox \
             --pack-extension="$CURRENT_DIR" \
-            --pack-extension-key="../key.pem"
+            --pack-extension-key="/tmp/extension_key.pem"
           
           # 4. 寻找并重命名产物
-          # Chromium 打包后的 .crx 默认会出现在被打包文件夹的“同级目录”
-          # 假设当前目录名是 'ChromeAI-translator'，产物就是 '../ChromeAI-translator.crx'
+          # Chrome 默认会将 .crx 放在与 $CURRENT_DIR 同级的目录下
           DIR_BASE_NAME=$(basename "$CURRENT_DIR")
           EXPECTED_CRX="../${DIR_BASE_NAME}.crx"
           
-          echo "Checking for CRX at: $EXPECTED_CRX"
+          echo "Looking for CRX at: $EXPECTED_CRX"
           
           if [ -f "$EXPECTED_CRX" ]; then
             mv "$EXPECTED_CRX" "./${EXT_NAME}-${VERSION}.crx"
             echo "Successfully prepared: ${EXT_NAME}-${VERSION}.crx"
           else
-            echo "CRX not found at expected path. Searching in parent directory..."
-            FOUND_CRX=$(find .. -maxdepth 1 -name "*.crx" | head -n 1)
-            if [ -n "$FOUND_CRX" ]; then
-              mv "$FOUND_CRX" "./${EXT_NAME}-${VERSION}.crx"
-              echo "Found and moved: $FOUND_CRX"
-            else
-              echo "Error: Cannot find any .crx file."
-              ls -la ..
-              exit 1
-            fi
+            echo "Error: CRX file not found. Listing parent directory:"
+            ls -la ..
+            exit 1
           fi
+          
+          # 5. 清理私钥
+          rm /tmp/extension_key.pem
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
