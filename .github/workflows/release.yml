@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Package CRX
+        env:
+          EXTENSION_KEY: ${{ secrets.CRX_KEY }}
+        run: |
+          # 1. 获取版本号和变量
+          VERSION=${GITHUB_REF#refs/tags/}
+          EXT_NAME="ChromeAI-translator"
+          CURRENT_DIR=$(pwd)
+          
+          # 2. 准备私钥 (放在 /tmp 目录下最安全，完全隔离)
+          echo "$EXTENSION_KEY" > /tmp/extension_key.pem
+          
+          # 3. 执行打包
+          # 使用 GitHub Ubuntu 镜像内置的 google-chrome
+          google-chrome --headless --no-sandbox \
+            --pack-extension="$CURRENT_DIR" \
+            --pack-extension-key="/tmp/extension_key.pem"
+          
+          # 4. 寻找并重命名产物
+          # Chrome 默认会将 .crx 放在与 $CURRENT_DIR 同级的目录下
+          DIR_BASE_NAME=$(basename "$CURRENT_DIR")
+          EXPECTED_CRX="../${DIR_BASE_NAME}.crx"
+          
+          echo "Looking for CRX at: $EXPECTED_CRX"
+          
+          if [ -f "$EXPECTED_CRX" ]; then
+            mv "$EXPECTED_CRX" "./${EXT_NAME}-${VERSION}.crx"
+            echo "Successfully prepared: ${EXT_NAME}-${VERSION}.crx"
+          else
+            echo "Error: CRX file not found. Listing parent directory:"
+            ls -la ..
+            exit 1
+          fi
+          
+          # 5. 清理私钥
+          rm /tmp/extension_key.pem
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          # 自动上传刚才重命名好的文件
+          files: |
+            ChromeAI-translator-*.crx
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
