@@ -4,7 +4,6 @@
 
 // 确保 DEFAULT_CONFIG 已加载（通过 config.js）
 if (typeof DEFAULT_CONFIG === 'undefined') {
-  // 如果 config.js 未加载，定义默认值作为后备
   var DEFAULT_CONFIG = {
     apiKey: '',
     apiBaseUrl: 'https://api.openai.com/v1',
@@ -16,21 +15,34 @@ if (typeof DEFAULT_CONFIG === 'undefined') {
   };
 }
 
-// DOM元素
-const elements = {
-  apiKey: document.getElementById('apiKey'),
-  apiBaseUrl: document.getElementById('apiBaseUrl'),
-  model: document.getElementById('model'),
-  customModel: document.getElementById('customModel'),
-  customModelGroup: document.querySelector('.custom-model-group'),
-  targetLanguage: document.getElementById('targetLanguage'),
-  systemPrompt: document.getElementById('systemPrompt'),
-  disableThinking: document.getElementById('disableThinking'),
-  testBtn: document.getElementById('testBtn'),
-  saveBtn: document.getElementById('saveBtn'),
-  resetBtn: document.getElementById('resetBtn'),
-  status: document.getElementById('status')
-};
+// DOM元素（DOMContentLoaded 后初始化）
+let elements = {};
+
+/**
+ * 初始化 DOM 元素引用
+ */
+function initElements() {
+  elements = {
+    apiKey: document.getElementById('apiKey'),
+    apiBaseUrl: document.getElementById('apiBaseUrl'),
+    model: document.getElementById('model'),
+    customModel: document.getElementById('customModel'),
+    customModelGroup: document.querySelector('.custom-model-group'),
+    targetLanguage: document.getElementById('targetLanguage'),
+    systemPrompt: document.getElementById('systemPrompt'),
+    disableThinking: document.getElementById('disableThinking'),
+    testBtn: document.getElementById('testBtn'),
+    saveBtn: document.getElementById('saveBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    status: document.getElementById('status')
+  };
+
+  // 绑定事件监听
+  elements.saveBtn.addEventListener('click', saveConfig);
+  elements.resetBtn.addEventListener('click', resetConfig);
+  elements.testBtn.addEventListener('click', testApiConnection);
+  elements.model.addEventListener('change', toggleCustomModelInput);
+}
 
 /**
  * 初始化预设URL点击事件
@@ -70,7 +82,19 @@ async function loadConfig() {
     
     elements.apiKey.value = config.apiKey || '';
     elements.apiBaseUrl.value = config.apiBaseUrl || DEFAULT_CONFIG.apiBaseUrl;
-    elements.model.value = config.model || DEFAULT_CONFIG.model;
+
+    // 处理 model 值：如果存储的值在下拉框中不存在，回退到默认值
+    const savedModel = config.model || DEFAULT_CONFIG.model;
+    const modelSelect = elements.model;
+    const optionExists = Array.from(modelSelect.options).some(opt => opt.value === savedModel);
+    if (optionExists) {
+      modelSelect.value = savedModel;
+    } else {
+      // 存储的模型不在选项中，回退到默认
+      modelSelect.value = DEFAULT_CONFIG.model;
+      console.log(`[AI Translator] Saved model "${savedModel}" not found in options, using default: ${DEFAULT_CONFIG.model}`);
+    }
+
     elements.customModel.value = config.customModel || '';
     elements.targetLanguage.value = config.targetLanguage || DEFAULT_CONFIG.targetLanguage;
     elements.systemPrompt.value = config.systemPrompt || DEFAULT_CONFIG.systemPrompt;
@@ -107,6 +131,13 @@ async function saveConfig() {
     return;
   }
 
+  // 自定义模型验证
+  if (config.model === 'custom' && !config.customModel) {
+    showStatus('请输入自定义模型名称', 'error');
+    elements.customModel.focus();
+    return;
+  }
+
   try {
     await chrome.storage.sync.set(config);
     showStatus('设置已保存！', 'success');
@@ -140,8 +171,17 @@ async function resetConfig() {
  * 切换自定义模型输入框显示
  */
 function toggleCustomModelInput() {
+  if (!elements.customModelGroup) return;
+  
   const isCustom = elements.model.value === 'custom';
   elements.customModelGroup.style.display = isCustom ? 'block' : 'none';
+  
+  // 如果切换到自定义模型，自动聚焦输入框
+  if (isCustom && elements.customModel) {
+    elements.customModel.focus();
+  }
+  
+  console.log('[AI Translator] Custom model input:', isCustom ? 'shown' : 'hidden');
 }
 
 /**
@@ -190,16 +230,21 @@ async function testApiConnection() {
   }
 }
 
-// 事件监听
-elements.saveBtn.addEventListener('click', saveConfig);
-elements.resetBtn.addEventListener('click', resetConfig);
-elements.testBtn.addEventListener('click', testApiConnection);
-elements.model.addEventListener('change', toggleCustomModelInput);
-
-// 页面加载时读取配置
-document.addEventListener('DOMContentLoaded', () => {
-  loadConfig();
+/**
+ * 初始化页面
+ */
+function init() {
+  initElements();
   initPresetUrls();
-});
+  loadConfig();
+}
+
+// 确保 DOM 就绪后再初始化（兼容脚本在 body 底部或 head 中的情况）
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  // DOM 已就绪（脚本在 body 底部时常见）
+  init();
+}
 
 console.log('[AI Translator] Options page loaded');
