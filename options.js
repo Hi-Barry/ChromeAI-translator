@@ -2,20 +2,18 @@
  * Options Page Logic - 设置页面逻辑
  */
 
-// 确保 DEFAULT_CONFIG 已加载（通过 config.js）
-if (typeof DEFAULT_CONFIG === 'undefined') {
-  var DEFAULT_CONFIG = {
-    apiKey: '',
-    apiBaseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o-mini',
-    customModel: '',
-    targetLanguage: 'zh-CN',
-    systemPrompt: '你是一个专业的翻译助手。请将用户提供的文本翻译成目标语言，只返回翻译结果，不要添加解释或其他内容。',
-    disableThinking: true
-  };
-}
+// 默认配置（独立维护，不依赖外部文件）
+const DEFAULT_CONFIG = {
+  apiKey: '',
+  apiBaseUrl: 'https://api.openai.com/v1',
+  model: 'gpt-4o-mini',
+  customModel: '',
+  targetLanguage: 'zh-CN',
+  systemPrompt: '你是一个专业的翻译助手。请将用户提供的文本翻译成目标语言，只返回翻译结果，不要添加解释或其他内容。',
+  disableThinking: true
+};
 
-// DOM元素（DOMContentLoaded 后初始化）
+// DOM元素
 let elements = {};
 
 /**
@@ -48,13 +46,13 @@ function initElements() {
  * 初始化预设URL点击事件
  */
 function initPresetUrls() {
-  document.querySelectorAll('.preset-url').forEach(link => {
-    link.addEventListener('click', (e) => {
+  document.querySelectorAll('.preset-url').forEach(function(link) {
+    link.addEventListener('click', function(e) {
       e.preventDefault();
-      const url = e.target.dataset.url;
+      var url = e.target.dataset.url;
       if (url) {
         elements.apiBaseUrl.value = url;
-        showStatus(`已设置 API 地址: ${url}`, 'info');
+        showStatus('已设置 API 地址: ' + url, 'info');
       }
     });
   });
@@ -63,36 +61,55 @@ function initPresetUrls() {
 /**
  * 显示状态消息
  */
-function showStatus(message, type = 'success') {
+function showStatus(message, type) {
+  type = type || 'success';
   elements.status.textContent = message;
-  elements.status.className = `status status-${type}`;
+  elements.status.className = 'status status-' + type;
   elements.status.style.display = 'block';
   
-  setTimeout(() => {
+  setTimeout(function() {
     elements.status.style.display = 'none';
   }, 3000);
 }
 
 /**
+ * 切换自定义模型输入框显示
+ */
+function toggleCustomModelInput() {
+  if (!elements.customModelGroup) return;
+  
+  var isCustom = elements.model.value === 'custom';
+  elements.customModelGroup.style.display = isCustom ? 'block' : 'none';
+  
+  // 如果切换到自定义模型，自动聚焦输入框
+  if (isCustom && elements.customModel) {
+    elements.customModel.focus();
+  }
+}
+
+/**
  * 加载保存的配置
  */
-async function loadConfig() {
-  try {
-    const config = await chrome.storage.sync.get(DEFAULT_CONFIG);
-    
+function loadConfig() {
+  chrome.storage.sync.get(DEFAULT_CONFIG, function(config) {
     elements.apiKey.value = config.apiKey || '';
     elements.apiBaseUrl.value = config.apiBaseUrl || DEFAULT_CONFIG.apiBaseUrl;
 
     // 处理 model 值：如果存储的值在下拉框中不存在，回退到默认值
-    const savedModel = config.model || DEFAULT_CONFIG.model;
-    const modelSelect = elements.model;
-    const optionExists = Array.from(modelSelect.options).some(opt => opt.value === savedModel);
+    var savedModel = config.model || DEFAULT_CONFIG.model;
+    var modelSelect = elements.model;
+    var optionExists = false;
+    for (var i = 0; i < modelSelect.options.length; i++) {
+      if (modelSelect.options[i].value === savedModel) {
+        optionExists = true;
+        break;
+      }
+    }
     if (optionExists) {
       modelSelect.value = savedModel;
     } else {
-      // 存储的模型不在选项中，回退到默认
       modelSelect.value = DEFAULT_CONFIG.model;
-      console.log(`[AI Translator] Saved model "${savedModel}" not found in options, using default: ${DEFAULT_CONFIG.model}`);
+      console.log('[AI Translator] Saved model "' + savedModel + '" not found in options, using default: ' + DEFAULT_CONFIG.model);
     }
 
     elements.customModel.value = config.customModel || '';
@@ -104,17 +121,14 @@ async function loadConfig() {
     toggleCustomModelInput();
     
     console.log('[AI Translator] Config loaded');
-  } catch (error) {
-    console.error('[AI Translator] Failed to load config:', error);
-    showStatus('加载配置失败', 'error');
-  }
+  });
 }
 
 /**
  * 保存配置
  */
-async function saveConfig() {
-  const config = {
+function saveConfig() {
+  var config = {
     apiKey: elements.apiKey.value.trim(),
     apiBaseUrl: elements.apiBaseUrl.value.trim() || DEFAULT_CONFIG.apiBaseUrl,
     model: elements.model.value,
@@ -138,60 +152,38 @@ async function saveConfig() {
     return;
   }
 
-  try {
-    await chrome.storage.sync.set(config);
-    showStatus('设置已保存！', 'success');
-    console.log('[AI Translator] Config saved');
-  } catch (error) {
-    console.error('[AI Translator] Failed to save config:', error);
-    showStatus('保存失败: ' + error.message, 'error');
-  }
+  chrome.storage.sync.set(config, function() {
+    if (chrome.runtime.lastError) {
+      console.error('[AI Translator] Failed to save config:', chrome.runtime.lastError);
+      showStatus('保存失败: ' + chrome.runtime.lastError.message, 'error');
+    } else {
+      showStatus('设置已保存！', 'success');
+      console.log('[AI Translator] Config saved');
+    }
+  });
 }
 
 /**
  * 重置为默认配置
  */
-async function resetConfig() {
+function resetConfig() {
   if (!confirm('确定要重置所有设置为默认值吗？')) {
     return;
   }
 
-  try {
-    await chrome.storage.sync.set(DEFAULT_CONFIG);
+  chrome.storage.sync.set(DEFAULT_CONFIG, function() {
     loadConfig();
     showStatus('已重置为默认设置', 'success');
     console.log('[AI Translator] Config reset');
-  } catch (error) {
-    console.error('[AI Translator] Failed to reset config:', error);
-    showStatus('重置失败: ' + error.message, 'error');
-  }
+  });
 }
 
 /**
- * 切换自定义模型输入框显示
+ * 测试API连接
  */
-function toggleCustomModelInput() {
-  if (!elements.customModelGroup) return;
-  
-  const isCustom = elements.model.value === 'custom';
-  elements.customModelGroup.style.display = isCustom ? 'block' : 'none';
-  
-  // 如果切换到自定义模型，自动聚焦输入框
-  if (isCustom && elements.customModel) {
-    elements.customModel.focus();
-  }
-  
-  console.log('[AI Translator] Custom model input:', isCustom ? 'shown' : 'hidden');
-}
-
-/**
- * 测试API连接 - 通过 background script 发送测试请求
- */
-async function testApiConnection() {
-  const apiKey = elements.apiKey.value.trim();
-  const apiBaseUrl = elements.apiBaseUrl.value.trim() || DEFAULT_CONFIG.apiBaseUrl;
-  const model = elements.model.value;
-  const customModel = elements.customModel.value.trim();
+function testApiConnection() {
+  var apiKey = elements.apiKey.value.trim();
+  var apiBaseUrl = elements.apiBaseUrl.value.trim() || DEFAULT_CONFIG.apiBaseUrl;
   
   if (!apiKey) {
     showStatus('请先输入API密钥', 'error');
@@ -199,35 +191,27 @@ async function testApiConnection() {
     return;
   }
 
-  // 获取实际使用的模型名称
-  const actualModel = model === 'custom' ? customModel : model;
-
-  if (!actualModel) {
-    showStatus('请选择或输入模型', 'error');
-    return;
-  }
-
   showStatus('正在测试连接...', 'info');
   elements.testBtn.disabled = true;
 
-  try {
-    const response = await chrome.runtime.sendMessage({
-      action: 'testConnection',
-      config: { apiKey, apiBaseUrl }
-    });
-
+  chrome.runtime.sendMessage({
+    action: 'testConnection',
+    config: { apiKey: apiKey, apiBaseUrl: apiBaseUrl }
+  }, function(response) {
+    elements.testBtn.disabled = false;
+    
+    if (chrome.runtime.lastError) {
+      showStatus('连接失败: ' + chrome.runtime.lastError.message, 'error');
+      return;
+    }
+    
     if (response && response.success) {
       showStatus('✅ API连接成功！', 'success');
     } else {
-      const errorMsg = response?.error || '未知错误';
+      var errorMsg = (response && response.error) ? response.error : '未知错误';
       showStatus('❌ 连接失败: ' + errorMsg, 'error');
     }
-  } catch (error) {
-    console.error('[AI Translator] Test connection error:', error);
-    showStatus('❌ 连接失败: ' + error.message, 'error');
-  } finally {
-    elements.testBtn.disabled = false;
-  }
+  });
 }
 
 /**
@@ -239,11 +223,10 @@ function init() {
   loadConfig();
 }
 
-// 确保 DOM 就绪后再初始化（兼容脚本在 body 底部或 head 中的情况）
+// 确保 DOM 就绪后再初始化
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
-  // DOM 已就绪（脚本在 body 底部时常见）
   init();
 }
 
