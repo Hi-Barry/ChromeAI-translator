@@ -15,68 +15,86 @@ if (window.translatorContentScriptLoaded) {
   // 防抖定时器
   let mouseUpTimer = null;
 
+  // 用户偏好配置（从 chrome.storage.sync 加载）
+  let userConfig = {
+    fontSize: DEFAULT_CONFIG.fontSize,
+    popupWidth: DEFAULT_CONFIG.popupWidth
+  };
+
   // ==================== LRU 缓存实现 ====================
-  // 翻译缓存（内存级别，页面刷新后清空）
-  // 实现LRU策略，避免内存无限增长
   const MAX_CACHE_SIZE = 100;
   const translationCache = new Map();
 
-  /**
-   * 设置缓存（LRU策略：超出限制时删除最旧的条目）
-   */
   function setCache(key, value) {
-    // 如果已存在，先删除（重新插入会移到最后，成为最新的）
     if (translationCache.has(key)) {
       translationCache.delete(key);
     }
-    // 如果超出限制，删除最旧的条目（Map的第一个条目）
     if (translationCache.size >= MAX_CACHE_SIZE) {
       const firstKey = translationCache.keys().next().value;
       translationCache.delete(firstKey);
-      console.log('[AI Translator] Cache evicted (LRU):', firstKey.substring(0, 30) + '...');
     }
     translationCache.set(key, value);
   }
 
-  /**
-   * 获取缓存
-   */
   function getCache(key) {
     return translationCache.get(key);
   }
 
-  // ==================== 弹窗宽度管理 ====================
-  // 弹窗宽度（持久化到 localStorage）
-  const DEFAULT_POPUP_WIDTH = 280;
+  // ==================== 弹窗尺寸管理 ====================
+  // 弹窗宽度 & 字体大小统一使用 chrome.storage.sync 持久化
   const MIN_POPUP_WIDTH = 200;
   const MAX_POPUP_WIDTH = 800;
-  const STORAGE_KEY = 'ai-translator-popup-width';
+  const MIN_FONT_SIZE = 10;
+  const MAX_FONT_SIZE = 28;
 
-  // 内存备选存储（当 localStorage 不可用时使用）
-  let memoryPopupWidth = DEFAULT_POPUP_WIDTH;
-
-  function getPopupWidth() {
+  /**
+   * 从 chrome.storage.sync 加载 UI 偏好配置
+   */
+  async function loadUIConfig() {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      const w = parseInt(saved, 10);
-      if (w && w >= MIN_POPUP_WIDTH && w <= MAX_POPUP_WIDTH) return w;
-    } catch (e) {
-      // localStorage 不可用，使用内存存储
-    }
-    return memoryPopupWidth;
-  }
+      const result = await chrome.storage.sync.get({
+        fontSize: DEFAULT_CONFIG.fontSize,
+        popupWidth: DEFAULT_CONFIG.popupWidth
+      });
+      userConfig.fontSize = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, result.fontSize));
+      userConfig.popupWidth = Math.max(MIN_POPUP_WIDTH, Math.min(MAX_POPUP_WIDTH, result.popupWidth));
 
-  function savePopupWidth(width) {
-    try {
-      localStorage.setItem(STORAGE_KEY, String(width));
+      // 如果弹窗已存在，实时更新样式
+      applyPopupStyles();
     } catch (e) {
-      // localStorage 不可用，使用内存存储
-      memoryPopupWidth = width;
+      console.error('[AI Translator] Failed to load UI config:', e);
     }
   }
+
+  /**
+   * 实时更新已有弹窗的样式
+   */
+  function applyPopupStyles() {
+    const popup = document.getElementById('ai-translator-popup');
+    if (popup) {
+      popup.style.width = userConfig.popupWidth + 'px';
+      const textEl = popup.querySelector('.translated-text');
+      if (textEl) {
+        textEl.style.fontSize = userConfig.fontSize + 'px';
+        textEl.style.lineHeight = '1.7';
+      }
+    }
+  }
+
+  // 监听 storage 变化（用户在设置页修改后实时生效）
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync') {
+      if (changes.fontSize) {
+        userConfig.fontSize = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, changes.fontSize.newValue));
+      }
+      if (changes.popupWidth) {
+        userConfig.popupWidth = Math.max(MIN_POPUP_WIDTH, Math.min(MAX_POPUP_WIDTH, changes.popupWidth.newValue));
+      }
+      applyPopupStyles();
+    }
+  });
 
   // ==================== 拖拽调整宽度 ====================
-  // 拖拽状态
   let isDragging = false;
   let dragStartX = 0;
   let dragStartWidth = 0;
@@ -114,73 +132,56 @@ if (window.translatorContentScriptLoaded) {
     document.body.style.userSelect = '';
     document.removeEventListener('mousemove', handleResizeMouseMove);
     document.removeEventListener('mouseup', handleResizeMouseUp);
-    savePopupWidth(dragCurrentWidth);
+    // 持久化到 chrome.storage.sync
+    userConfig.popupWidth = dragCurrentWidth;
+    chrome.storage.sync.set({ popupWidth: dragCurrentWidth });
   }
 
   // ==================== 文本选择处理 ====================
-  /**
-   * 获取选中的文本
-   */
   function getSelectedText() {
     const selection = window.getSelection();
-    const text = selection.toString().trim();
-    return text;
+    return selection.toString().trim();
   }
 
-  /**
-   * 检查是否已存在翻译弹窗
-   */
   function hasExistingPopup() {
     return document.getElementById('ai-translator-popup') !== null;
   }
 
-  /**
-   * 关闭现有弹窗
-   */
   function closeExistingPopup() {
     const existing = document.getElementById('ai-translator-popup');
     if (existing) {
       existing.remove();
       currentPopup = null;
     }
-    // 清除待执行的setTimeout
     if (mouseUpTimer !== null) {
       clearTimeout(mouseUpTimer);
       mouseUpTimer = null;
     }
-    // 清除selectedText状态
     selectedText = '';
-    // 移除handleOutsideClick监听器
     document.removeEventListener('click', handleOutsideClick);
   }
 
   // ==================== 弹窗创建与管理 ====================
-  /**
-   * 创建翻译弹窗
-   */
   function createTranslatorPopup(originalText) {
-    // 先关闭已存在的弹窗
     closeExistingPopup();
 
-    // 创建弹窗容器 — 仅翻译结果圆角矩形 + 复制按钮
     const popup = document.createElement('div');
     popup.id = 'ai-translator-popup';
     popup.className = 'ai-translator-popup';
-    popup.style.width = getPopupWidth() + 'px';
+    popup.style.width = userConfig.popupWidth + 'px';
 
     popup.innerHTML = `
       <div class="translator-resize-handle" id="translator-resize-handle"></div>
       <button class="translator-copy-btn" id="translator-copy-btn" title="复制翻译结果">📋</button>
-      <div class="translator-text translated-text">正在翻译...</div>
+      <div class="translator-text translated-text" style="font-size: ${userConfig.fontSize}px; line-height: 1.7;">正在翻译...</div>
     `;
 
-    // 添加到页面
     document.body.appendChild(popup);
     currentPopup = popup;
 
     const resizeHandle = popup.querySelector('#translator-resize-handle');
     if (resizeHandle) {
-      resizeHandle.addEventListener("mousedown", handleResizeMouseDown);
+      resizeHandle.addEventListener('mousedown', handleResizeMouseDown);
     }
 
     // 复制按钮事件
@@ -198,16 +199,28 @@ if (window.translatorContentScriptLoaded) {
               copyBtn.classList.remove('copied');
             }, 1200);
           }).catch(() => {
-            // Fallback for older browsers
-            const range = document.createRange();
-            range.selectNodeContents(textEl);
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(range);
-            document.execCommand('copy');
-            sel.removeAllRanges();
-            copyBtn.textContent = '✓';
-            setTimeout(() => { copyBtn.textContent = '📋'; }, 1200);
+            // Fallback: 使用现代 Clipboard API 的 write 方法
+            const text = textEl.textContent;
+            const blob = new Blob([text], { type: 'text/plain' });
+            navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]).then(() => {
+              copyBtn.textContent = '✓';
+              copyBtn.classList.add('copied');
+              setTimeout(() => {
+                copyBtn.textContent = '📋';
+                copyBtn.classList.remove('copied');
+              }, 1200);
+            }).catch(() => {
+              // 最终 fallback：选中文本复制
+              const range = document.createRange();
+              range.selectNodeContents(textEl);
+              const sel = window.getSelection();
+              sel.removeAllRanges();
+              sel.addRange(range);
+              document.execCommand('copy');
+              sel.removeAllRanges();
+              copyBtn.textContent = '✓';
+              setTimeout(() => { copyBtn.textContent = '📋'; }, 1200);
+            });
           });
         }
       });
@@ -219,17 +232,12 @@ if (window.translatorContentScriptLoaded) {
     return popup;
   }
 
-  /**
-   * 处理点击弹窗外部的关闭逻辑
-   */
   function handleOutsideClick(event) {
     const popup = document.getElementById('ai-translator-popup');
     if (popup && !popup.contains(event.target)) {
-      // 检查点击的是否是选中的文本
       const selection = window.getSelection();
       const clickedText = selection.toString().trim();
       
-      // 如果点击的是选中的文本，不关闭弹窗
       if (clickedText && isClickInSelection(event)) {
         return;
       }
@@ -239,9 +247,6 @@ if (window.translatorContentScriptLoaded) {
     }
   }
 
-  /**
-   * 检查点击位置是否在选中的文本范围内
-   */
   function isClickInSelection(event) {
     const selection = window.getSelection();
     if (selection.rangeCount === 0) return false;
@@ -258,26 +263,16 @@ if (window.translatorContentScriptLoaded) {
   }
 
   // ==================== 文本格式化 ====================
-  /**
-   * 安全格式化文本（保留换行，转义危险HTML标签）
-   * 改进原有的 escapeHtml，保留基本格式
-   */
   function safeFormatText(text) {
     return text
-      // 转义 HTML 特殊字符
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
-      // 保留换行格式
       .replace(/\n/g, '<br>')
-      // 保留连续空格（首行缩进等）
       .replace(/  +/g, match => '&nbsp;'.repeat(match.length));
   }
 
   // ==================== 翻译请求 ====================
-  /**
-   * 发送翻译请求到 background script
-   */
   async function requestTranslation(text) {
     try {
       const response = await chrome.runtime.sendMessage({
@@ -296,23 +291,16 @@ if (window.translatorContentScriptLoaded) {
     }
   }
 
-  /**
-   * 更新翻译结果显示
-   */
   function updateTranslationResult(translation) {
     const popup = document.getElementById('ai-translator-popup');
     if (!popup) return;
 
     const translatedTextEl = popup.querySelector('.translated-text');
     if (translatedTextEl) {
-      // 使用改进的格式化函数，保留换行等格式
       translatedTextEl.innerHTML = safeFormatText(translation);
     }
   }
 
-  /**
-   * 显示翻译错误
-   */
   function showTranslationError(error) {
     const popup = document.getElementById('ai-translator-popup');
     if (!popup) return;
@@ -324,33 +312,24 @@ if (window.translatorContentScriptLoaded) {
   }
 
   // ==================== 事件处理 ====================
-  /**
-   * 处理鼠标释放事件（文本选择完成）
-   * 包含防抖逻辑和setTimeout清理
-   */
   function handleMouseUp(event) {
-    // 如果鼠标在翻译窗口内，不触发翻译
     const existingPopup = document.getElementById('ai-translator-popup');
     if (existingPopup && existingPopup.contains(event.target)) {
       return;
     }
 
-    // 清除之前的定时器（防抖）
     if (mouseUpTimer !== null) {
       clearTimeout(mouseUpTimer);
     }
 
-    // 延迟执行，确保选择已完成
     mouseUpTimer = setTimeout(() => {
       mouseUpTimer = null;
       const text = getSelectedText();
 
-      // 如果没有选中文本，或选中文本太短，不处理
       if (!text || text.length < 2) {
         return;
       }
 
-      // 如果选中的文本和之前一样，不重复处理
       if (text === selectedText) {
         return;
       }
@@ -358,7 +337,6 @@ if (window.translatorContentScriptLoaded) {
       selectedText = text;
       console.log('[AI Translator] Selected text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
 
-      // 检查缓存
       const cachedResult = getCache(text);
       if (cachedResult) {
         console.log('[AI Translator] Cache hit');
@@ -367,10 +345,8 @@ if (window.translatorContentScriptLoaded) {
         return;
       }
 
-      // 创建翻译弹窗
       createTranslatorPopup(text);
 
-      // 请求翻译
       requestTranslation(text)
         .then(translation => {
           setCache(text, translation);
@@ -382,28 +358,19 @@ if (window.translatorContentScriptLoaded) {
     }, 200);
   }
 
-  /**
-   * 处理快捷键
-   */
   function handleKeyDown(event) {
-    // Esc 键关闭弹窗
     if (event.key === 'Escape') {
       closeExistingPopup();
       return;
     }
   }
 
-  /**
-   * 监听来自 background script 的消息
-   */
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'trigger-translation') {
-      // 快捷键触发翻译当前选中的文本
       const text = getSelectedText();
       if (text && text.length >= 2) {
         selectedText = text;
 
-        // 检查缓存
         const cachedResult = getCache(text);
         if (cachedResult) {
           console.log('[AI Translator] Cache hit (shortcut)');
@@ -434,6 +401,9 @@ if (window.translatorContentScriptLoaded) {
   // 绑定事件监听器
   document.addEventListener('mouseup', handleMouseUp);
   document.addEventListener('keydown', handleKeyDown);
+
+  // 初始化时加载 UI 偏好配置
+  loadUIConfig();
 
   console.log('[AI Translator] Event listeners attached');
 }

@@ -11,7 +11,11 @@ const DEFAULT_CONFIG = {
   customModel: '',
   targetLanguage: 'zh-CN',
   systemPrompt: '你是一个专业的翻译助手。请将用户提供的文本翻译成目标语言，只返回翻译结果，不要添加解释或其他内容。',
-  disableThinking: true
+  disableThinking: true,
+  // 翻译弹窗字体大小（px）
+  fontSize: 14,
+  // 翻译弹窗宽度（px）
+  popupWidth: 280
 };
 
 // 支持思考模式的模型列表（DeepSeek 等推理模型）
@@ -66,6 +70,20 @@ function modelSupportsThinking(modelName) {
   return MODELS_SUPPORT_THINKING.some(m => modelName.toLowerCase().includes(m));
 }
 
+/**
+ * 从 chrome.storage.sync 获取完整配置（合并默认值）
+ * 在 content script 和 background script 中均可使用
+ */
+async function loadConfig() {
+  try {
+    const result = await chrome.storage.sync.get(DEFAULT_CONFIG);
+    return result;
+  } catch (error) {
+    console.error('[AI Translator] Failed to load config:', error);
+    return { ...DEFAULT_CONFIG };
+  }
+}
+
 // 导出配置（由于 Chrome Extension 不支持 ES Module，使用全局变量）
 if (typeof window !== 'undefined') {
   window.DEFAULT_CONFIG = DEFAULT_CONFIG;
@@ -73,4 +91,5 @@ if (typeof window !== 'undefined') {
   window.ERROR_MESSAGES = ERROR_MESSAGES;
   window.getFriendlyErrorMessage = getFriendlyErrorMessage;
   window.modelSupportsThinking = modelSupportsThinking;
+  window.loadConfig = loadConfig;
 }

@@ -7,27 +7,6 @@
 importScripts('config.js');
 
 /**
- * 获取存储的配置
- */
-async function getConfig() {
-  try {
-    const result = await chrome.storage.sync.get({
-      apiKey: '',
-      apiBaseUrl: DEFAULT_CONFIG.apiBaseUrl,
-      model: DEFAULT_CONFIG.model,
-      customModel: DEFAULT_CONFIG.customModel,
-      targetLanguage: DEFAULT_CONFIG.targetLanguage,
-      systemPrompt: DEFAULT_CONFIG.systemPrompt,
-      disableThinking: DEFAULT_CONFIG.disableThinking
-    });
-    return result;
-  } catch (error) {
-    console.error('[AI Translator] Failed to get config:', error);
-    return DEFAULT_CONFIG;
-  }
-}
-
-/**
  * 验证URL格式
  */
 function isValidUrl(urlString) {
@@ -250,7 +229,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
  * 处理翻译请求
  */
 async function handleTranslation(text, tabId) {
-  const config = await getConfig();
+  const config = await loadConfig();
   return await translateWithAPI(text, config);
 }
 

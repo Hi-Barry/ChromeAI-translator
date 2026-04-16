@@ -2,20 +2,6 @@
  * Options Page Logic - 设置页面逻辑
  */
 
-// 确保 DEFAULT_CONFIG 已加载（通过 config.js）
-if (typeof DEFAULT_CONFIG === 'undefined') {
-  // 如果 config.js 未加载，定义默认值作为后备
-  var DEFAULT_CONFIG = {
-    apiKey: '',
-    apiBaseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o-mini',
-    customModel: '',
-    targetLanguage: 'zh-CN',
-    systemPrompt: '你是一个专业的翻译助手。请将用户提供的文本翻译成目标语言，只返回翻译结果，不要添加解释或其他内容。',
-    disableThinking: true
-  };
-}
-
 // DOM元素
 const elements = {
   apiKey: document.getElementById('apiKey'),
@@ -26,15 +12,28 @@ const elements = {
   targetLanguage: document.getElementById('targetLanguage'),
   systemPrompt: document.getElementById('systemPrompt'),
   disableThinking: document.getElementById('disableThinking'),
+  fontSize: document.getElementById('fontSize'),
+  fontSizeValue: document.getElementById('fontSizeValue'),
+  popupWidth: document.getElementById('popupWidth'),
+  popupWidthValue: document.getElementById('popupWidthValue'),
   testBtn: document.getElementById('testBtn'),
   saveBtn: document.getElementById('saveBtn'),
   resetBtn: document.getElementById('resetBtn'),
   status: document.getElementById('status')
 };
 
-/**
- * 初始化预设URL点击事件
- */
+// ==================== Range 滑块实时预览 ====================
+
+elements.fontSize.addEventListener('input', () => {
+  elements.fontSizeValue.textContent = elements.fontSize.value + 'px';
+});
+
+elements.popupWidth.addEventListener('input', () => {
+  elements.popupWidthValue.textContent = elements.popupWidth.value + 'px';
+});
+
+// ==================== 预设 URL ====================
+
 function initPresetUrls() {
   document.querySelectorAll('.preset-url').forEach(link => {
     link.addEventListener('click', (e) => {
@@ -48,9 +47,8 @@ function initPresetUrls() {
   });
 }
 
-/**
- * 显示状态消息
- */
+// ==================== 状态消息 ====================
+
 function showStatus(message, type = 'success') {
   elements.status.textContent = message;
   elements.status.className = `status status-${type}`;
@@ -61,9 +59,8 @@ function showStatus(message, type = 'success') {
   }, 3000);
 }
 
-/**
- * 加载保存的配置
- */
+// ==================== 配置加载 ====================
+
 async function loadConfig() {
   try {
     const config = await chrome.storage.sync.get(DEFAULT_CONFIG);
@@ -76,6 +73,12 @@ async function loadConfig() {
     elements.systemPrompt.value = config.systemPrompt || DEFAULT_CONFIG.systemPrompt;
     elements.disableThinking.checked = config.disableThinking !== undefined ? config.disableThinking : DEFAULT_CONFIG.disableThinking;
     
+    // 界面设置
+    elements.fontSize.value = config.fontSize || DEFAULT_CONFIG.fontSize;
+    elements.fontSizeValue.textContent = (config.fontSize || DEFAULT_CONFIG.fontSize) + 'px';
+    elements.popupWidth.value = config.popupWidth || DEFAULT_CONFIG.popupWidth;
+    elements.popupWidthValue.textContent = (config.popupWidth || DEFAULT_CONFIG.popupWidth) + 'px';
+    
     // 检查是否需要显示自定义模型输入框
     toggleCustomModelInput();
     
@@ -86,9 +89,8 @@ async function loadConfig() {
   }
 }
 
-/**
- * 保存配置
- */
+// ==================== 配置保存 ====================
+
 async function saveConfig() {
   const config = {
     apiKey: elements.apiKey.value.trim(),
@@ -97,7 +99,9 @@ async function saveConfig() {
     customModel: elements.customModel.value.trim(),
     targetLanguage: elements.targetLanguage.value,
     systemPrompt: elements.systemPrompt.value.trim() || DEFAULT_CONFIG.systemPrompt,
-    disableThinking: elements.disableThinking.checked
+    disableThinking: elements.disableThinking.checked,
+    fontSize: parseInt(elements.fontSize.value, 10),
+    popupWidth: parseInt(elements.popupWidth.value, 10)
   };
 
   // 验证API密钥
@@ -117,9 +121,8 @@ async function saveConfig() {
   }
 }
 
-/**
- * 重置为默认配置
- */
+// ==================== 重置配置 ====================
+
 async function resetConfig() {
   if (!confirm('确定要重置所有设置为默认值吗？')) {
     return;
@@ -136,17 +139,15 @@ async function resetConfig() {
   }
 }
 
-/**
- * 切换自定义模型输入框显示
- */
+// ==================== 自定义模型切换 ====================
+
 function toggleCustomModelInput() {
   const isCustom = elements.model.value === 'custom';
   elements.customModelGroup.style.display = isCustom ? 'block' : 'none';
 }
 
-/**
- * 测试API连接 - 通过 background script 发送测试请求
- */
+// ==================== 测试连接 ====================
+
 async function testApiConnection() {
   const apiKey = elements.apiKey.value.trim();
   const apiBaseUrl = elements.apiBaseUrl.value.trim() || DEFAULT_CONFIG.apiBaseUrl;
@@ -159,7 +160,6 @@ async function testApiConnection() {
     return;
   }
 
-  // 获取实际使用的模型名称
   const actualModel = model === 'custom' ? customModel : model;
 
   if (!actualModel) {
@@ -190,7 +190,8 @@ async function testApiConnection() {
   }
 }
 
-// 事件监听
+// ==================== 事件监听 ====================
+
 elements.saveBtn.addEventListener('click', saveConfig);
 elements.resetBtn.addEventListener('click', resetConfig);
 elements.testBtn.addEventListener('click', testApiConnection);

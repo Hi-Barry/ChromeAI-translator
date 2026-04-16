@@ -100,6 +100,27 @@
       </section>
 
       <section class="section">
+        <h2>界面设置</h2>
+        <div class="form-group">
+          <label for="fontSize">翻译结果字体大小</label>
+          <div class="range-group">
+            <input type="range" id="fontSize" min="10" max="28" step="1" value="14">
+            <span class="range-value" id="fontSizeValue">14px</span>
+          </div>
+          <p class="help-text">调整翻译弹窗中文字的大小（10px - 28px）</p>
+        </div>
+
+        <div class="form-group">
+          <label for="popupWidth">默认弹窗宽度</label>
+          <div class="range-group">
+            <input type="range" id="popupWidth" min="200" max="800" step="20" value="280">
+            <span class="range-value" id="popupWidthValue">280px</span>
+          </div>
+          <p class="help-text">翻译弹窗的默认宽度（也可在弹窗左边缘拖拽调整）</p>
+        </div>
+      </section>
+
+      <section class="section">
         <h2>快捷键</h2>
         <div class="shortcut-info">
           <p><strong>Ctrl+Shift+T</strong> - 翻译选中的文本</p>
