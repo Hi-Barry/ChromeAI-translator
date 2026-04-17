@@ -18,14 +18,17 @@ const DEFAULT_CONFIG = {
   popupWidth: 280
 };
 
-// 支持思考模式的模型列表（DeepSeek 等推理模型）
-const MODELS_SUPPORT_THINKING = [
-  'deepseek-reasoner',
-  'deepseek-r1',
-  'deepseek-r1-distill',
-  'o1',
-  'o1-mini',
-  'o1-preview'
+// 支持思考模式的模型正则模式
+// 匹配已知会输出 reasoning_content 的推理/思考模型
+const THINKING_MODEL_PATTERNS = [
+  /qwen3[\.\-]/i,                        // Qwen3-*, Qwen3.5-*
+  /glm[\-\.\/\s]*(4\.[5-9]|5)/i,         // GLM-4.5+, GLM-5（不含 glm-4-9b 等旧模型）
+  /deepseek[\-\.\/\s]*(r1|reasoner)/i,   // DeepSeek-R1, DeepSeek-Reasoner
+  /deepseek[\-\.\/\s]*v3[\.\-]2/i,       // DeepSeek-V3.2
+  /v3[\.\-]1[\-\.]terminus/i,            // V3.1-Terminus
+  /hunyuan[\-\.\/\s]*a13b/i,             // Hunyuan-A13B
+  /\bo1[\-\s\/]/i,                        // OpenAI o1-mini, o1-preview 等
+  /\bo1$/i,                               // OpenAI o1
 ];
 
 // 错误消息映射（用户友好的错误提示）
@@ -67,7 +70,19 @@ function getFriendlyErrorMessage(error) {
  * 检查模型是否支持思考模式
  */
 function modelSupportsThinking(modelName) {
-  return MODELS_SUPPORT_THINKING.some(m => modelName.toLowerCase().includes(m));
+  return THINKING_MODEL_PATTERNS.some(pattern => pattern.test(modelName));
+}
+
+/**
+ * 检测API供应商（基于 Base URL）
+ * 用于决定思考模式参数格式等供应商差异
+ */
+function detectProvider(apiBaseUrl) {
+  const url = apiBaseUrl.toLowerCase();
+  if (url.includes('siliconflow')) return 'siliconflow';
+  if (url.includes('anthropic')) return 'anthropic';
+  if (url.includes('deepseek')) return 'deepseek';
+  return 'openai-compatible';
 }
 
 /**
@@ -87,9 +102,10 @@ async function loadConfig() {
 // 导出配置（由于 Chrome Extension 不支持 ES Module，使用全局变量）
 if (typeof window !== 'undefined') {
   window.DEFAULT_CONFIG = DEFAULT_CONFIG;
-  window.MODELS_SUPPORT_THINKING = MODELS_SUPPORT_THINKING;
+  window.THINKING_MODEL_PATTERNS = THINKING_MODEL_PATTERNS;
   window.ERROR_MESSAGES = ERROR_MESSAGES;
   window.getFriendlyErrorMessage = getFriendlyErrorMessage;
   window.modelSupportsThinking = modelSupportsThinking;
+  window.detectProvider = detectProvider;
   window.loadConfig = loadConfig;
 }
