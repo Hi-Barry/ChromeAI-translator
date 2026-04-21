@@ -18,7 +18,9 @@ if (window.translatorContentScriptLoaded) {
   // 用户偏好配置（从 chrome.storage.sync 加载）
   let userConfig = {
     fontSize: DEFAULT_CONFIG.fontSize,
-    popupWidth: DEFAULT_CONFIG.popupWidth
+    popupWidth: DEFAULT_CONFIG.popupWidth,
+    popupBorderColor: DEFAULT_CONFIG.popupBorderColor,
+    popupBorderWidth: DEFAULT_CONFIG.popupBorderWidth
   };
 
   // ==================== LRU 缓存实现 ====================
@@ -54,10 +56,14 @@ if (window.translatorContentScriptLoaded) {
     try {
       const result = await chrome.storage.sync.get({
         fontSize: DEFAULT_CONFIG.fontSize,
-        popupWidth: DEFAULT_CONFIG.popupWidth
+        popupWidth: DEFAULT_CONFIG.popupWidth,
+        popupBorderColor: DEFAULT_CONFIG.popupBorderColor,
+        popupBorderWidth: DEFAULT_CONFIG.popupBorderWidth
       });
       userConfig.fontSize = Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, result.fontSize));
       userConfig.popupWidth = Math.max(MIN_POPUP_WIDTH, Math.min(MAX_POPUP_WIDTH, result.popupWidth));
+      userConfig.popupBorderColor = result.popupBorderColor || DEFAULT_CONFIG.popupBorderColor;
+      userConfig.popupBorderWidth = result.popupBorderWidth || DEFAULT_CONFIG.popupBorderWidth;
 
       // 如果弹窗已存在，实时更新样式
       applyPopupStyles();
@@ -66,17 +72,20 @@ if (window.translatorContentScriptLoaded) {
     }
   }
 
-  /**
+/**
    * 实时更新已有弹窗的样式
    */
   function applyPopupStyles() {
     const popup = document.getElementById('ai-translator-popup');
     if (popup) {
       popup.style.width = userConfig.popupWidth + 'px';
+      popup.style.borderColor = userConfig.popupBorderColor;
+      popup.style.borderWidth = userConfig.popupBorderWidth + 'px';
       const textEl = popup.querySelector('.translated-text');
       if (textEl) {
         textEl.style.fontSize = userConfig.fontSize + 'px';
         textEl.style.lineHeight = '1.7';
+        textEl.style.color = userConfig.popupBorderColor; // 文字颜色与边框颜色一致
       }
     }
   }
@@ -89,6 +98,12 @@ if (window.translatorContentScriptLoaded) {
       }
       if (changes.popupWidth) {
         userConfig.popupWidth = Math.max(MIN_POPUP_WIDTH, Math.min(MAX_POPUP_WIDTH, changes.popupWidth.newValue));
+      }
+      if (changes.popupBorderColor) {
+        userConfig.popupBorderColor = changes.popupBorderColor.newValue;
+      }
+      if (changes.popupBorderWidth) {
+        userConfig.popupBorderWidth = changes.popupBorderWidth.newValue;
       }
       applyPopupStyles();
     }
@@ -170,10 +185,13 @@ if (window.translatorContentScriptLoaded) {
     popup.className = 'ai-translator-popup';
     popup.style.width = userConfig.popupWidth + 'px';
 
+    popup.style.borderColor = userConfig.popupBorderColor;
+    popup.style.borderWidth = userConfig.popupBorderWidth + 'px';
+
     popup.innerHTML = `
       <div class="translator-resize-handle" id="translator-resize-handle"></div>
       <button class="translator-copy-btn" id="translator-copy-btn" title="复制翻译结果">📋</button>
-      <div class="translator-text translated-text" style="font-size: ${userConfig.fontSize}px; line-height: 1.7;">正在翻译...</div>
+      <div class="translator-text translated-text" style="font-size: ${userConfig.fontSize}px; line-height: 1.7; color: ${userConfig.popupBorderColor};">正在翻译...</div>
     `;
 
     document.body.appendChild(popup);
@@ -237,29 +255,16 @@ if (window.translatorContentScriptLoaded) {
     if (popup && !popup.contains(event.target)) {
       const selection = window.getSelection();
       const clickedText = selection.toString().trim();
-      
-      if (clickedText && isClickInSelection(event)) {
+
+      // 用户选了新文本（不同于当前翻译的文本），不关闭弹窗——
+      // handleMouseUp 的防抖定时器会创建新弹窗并触发翻译
+      if (clickedText && clickedText.length >= 2 && clickedText !== selectedText) {
         return;
       }
-      
+
       closeExistingPopup();
       document.removeEventListener('click', handleOutsideClick);
     }
-  }
-
-  function isClickInSelection(event) {
-    const selection = window.getSelection();
-    if (selection.rangeCount === 0) return false;
-
-    const range = selection.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-    
-    return (
-      event.clientX >= rect.left &&
-      event.clientX <= rect.right &&
-      event.clientY >= rect.top &&
-      event.clientY <= rect.bottom
-    );
   }
 
   // ==================== 文本格式化 ====================

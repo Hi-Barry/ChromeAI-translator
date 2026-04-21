@@ -15,7 +15,11 @@ const DEFAULT_CONFIG = {
   // 翻译弹窗字体大小（px）
   fontSize: 14,
   // 翻译弹窗宽度（px）
-  popupWidth: 280
+  popupWidth: 280,
+  // 翻译弹窗边框颜色（默认与翻译文字颜色一致#1a365d）
+  popupBorderColor: '#1a365d',
+  // 翻译弹窗边框宽度（px）
+  popupBorderWidth: 2
 };
 
 // 支持思考模式的模型正则模式

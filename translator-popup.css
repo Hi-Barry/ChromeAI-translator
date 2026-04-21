@@ -11,6 +11,7 @@
   max-width: 80vw;
   max-height: 50vh;
   background: #ffffff;
+  border: 2px solid #1a365d; /* 默认边框：很细的圆角矩形，颜色与文字一致 */
   border-radius: 10px;
   box-shadow: 0 2px 16px rgba(0, 0, 0, 0.15);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;

@@ -2,7 +2,7 @@
  * Options Page Logic - 设置页面逻辑
  */
 
-// DOM元素
+// DOM 元素
 const elements = {
   apiKey: document.getElementById('apiKey'),
   apiBaseUrl: document.getElementById('apiBaseUrl'),
@@ -16,6 +16,10 @@ const elements = {
   fontSizeValue: document.getElementById('fontSizeValue'),
   popupWidth: document.getElementById('popupWidth'),
   popupWidthValue: document.getElementById('popupWidthValue'),
+  popupBorderColor: document.getElementById('popupBorderColor'),
+  popupBorderColorValue: document.getElementById('popupBorderColorValue'),
+  popupBorderWidth: document.getElementById('popupBorderWidth'),
+  popupBorderWidthValue: document.getElementById('popupBorderWidthValue'),
   testBtn: document.getElementById('testBtn'),
   saveBtn: document.getElementById('saveBtn'),
   resetBtn: document.getElementById('resetBtn'),
@@ -30,6 +34,15 @@ elements.fontSize.addEventListener('input', () => {
 
 elements.popupWidth.addEventListener('input', () => {
   elements.popupWidthValue.textContent = elements.popupWidth.value + 'px';
+});
+
+elements.popupBorderWidth.addEventListener('input', () => {
+  elements.popupBorderWidthValue.textContent = elements.popupBorderWidth.value + 'px';
+});
+
+// 颜色选择器实时预览
+elements.popupBorderColor.addEventListener('input', () => {
+  elements.popupBorderColorValue.textContent = elements.popupBorderColor.value;
 });
 
 // ==================== 预设 URL ====================
@@ -78,6 +91,10 @@ async function loadConfig() {
     elements.fontSizeValue.textContent = (config.fontSize || DEFAULT_CONFIG.fontSize) + 'px';
     elements.popupWidth.value = config.popupWidth || DEFAULT_CONFIG.popupWidth;
     elements.popupWidthValue.textContent = (config.popupWidth || DEFAULT_CONFIG.popupWidth) + 'px';
+    elements.popupBorderColor.value = config.popupBorderColor || DEFAULT_CONFIG.popupBorderColor;
+    elements.popupBorderColorValue.textContent = config.popupBorderColor || DEFAULT_CONFIG.popupBorderColor;
+    elements.popupBorderWidth.value = config.popupBorderWidth || DEFAULT_CONFIG.popupBorderWidth;
+    elements.popupBorderWidthValue.textContent = (config.popupBorderWidth || DEFAULT_CONFIG.popupBorderWidth) + 'px';
     
     // 检查是否需要显示自定义模型输入框
     toggleCustomModelInput();
@@ -101,7 +118,9 @@ async function saveConfig() {
     systemPrompt: elements.systemPrompt.value.trim() || DEFAULT_CONFIG.systemPrompt,
     disableThinking: elements.disableThinking.checked,
     fontSize: parseInt(elements.fontSize.value, 10),
-    popupWidth: parseInt(elements.popupWidth.value, 10)
+    popupWidth: parseInt(elements.popupWidth.value, 10),
+    popupBorderColor: elements.popupBorderColor.value,
+    popupBorderWidth: parseInt(elements.popupBorderWidth.value, 10)
   };
 
   // 验证API密钥

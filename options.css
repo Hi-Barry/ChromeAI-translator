@@ -335,6 +335,64 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* 颜色选择器 */
+.color-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.color-group input[type="color"] {
+  flex: 1;
+  height: 40px;
+  -webkit-appearance: none;
+  appearance: none;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 0;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.color-group input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+  border-radius: 8px;
+}
+
+.color-group input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 8px;
+}
+
+.color-group input[type="color"]::-moz-color-swatch {
+  border: none;
+  border-radius: 8px;
+}
+
+.color-group input[type="color"]:hover {
+  border-color: #667eea;
+}
+
+.color-group input[type="color"]:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.color-value {
+  min-width: 80px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #667eea;
+  background: #f0f4ff;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-family: monospace;
+  text-transform: uppercase;
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   body {
