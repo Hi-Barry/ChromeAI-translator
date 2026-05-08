@@ -452,7 +452,7 @@ function injectBuiltInTranslate(text, targetLang) {
       }
       // 如果 availability() 不支持（旧版 API），直接尝试创建
 
-      // 5. 创建翻译器（10 秒超时，这是关键：防止永久挂起）
+      // 5. 创建翻译器（10 秒超时，模型可能被 Chrome 卸载需重试）
       let translator;
       try {
         translator = await withTimeout(
@@ -464,23 +464,31 @@ function injectBuiltInTranslate(text, targetLang) {
           '翻译器初始化超时'
         );
       } catch (e) {
-        const msg = e.message || '未知错误';
-        // 如果 availability 没有确认为已就绪，任何 create 失败都指向缺包
-        if (availabilityStatus !== 'readily' && availabilityStatus !== 'available') {
+        // 如果模型确认已就绪，失败可能是 Chrome 卸载了模型 → 重试一次
+        const isReady = availabilityStatus === 'readily' || availabilityStatus === 'available';
+        if (isReady) {
+          try {
+            await new Promise(r => setTimeout(r, 500));
+            translator = await withTimeout(
+              TranslatorAPI.create({
+                sourceLanguage: detectedSource,
+                targetLanguage: targetLang
+              }),
+              10000,
+              '翻译器初始化超时'
+            );
+          } catch (e2) {
+            return {
+              error: '创建翻译器失败：' + (e2.message || '未知错误') + '。翻译模型可能已被卸载，请重试。'
+            };
+          }
+        } else {
+          // 未确认就绪，指向缺包
           return {
             error: '离线翻译语言包未安装。请在扩展设置页点击「安装语言包」下载。\n\n' +
                    '或直接访问：chrome://on-device-translation-internals/'
           };
         }
-        // 区分超时和其他错误
-        if (msg.includes('超时') || msg.includes('timeout')) {
-          return {
-            error: '翻译器初始化超时，请重试'
-          };
-        }
-        return {
-          error: '创建翻译器失败：' + msg
-        };
       }
 
       // 6. 执行翻译（15 秒超时）

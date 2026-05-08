@@ -223,11 +223,7 @@ if (window.translatorContentScriptLoaded) {
     loadingTimer = setTimeout(() => {
       const textEl = popup.querySelector('.translated-text');
       if (textEl && textEl.textContent === '正在翻译...') {
-        textEl.innerHTML = safeFormatText(
-          '⚠️ 翻译超时。离线语言包可能未安装。\n\n' +
-          '请点击扩展图标 → 选项 → 安装语言包'
-        );
-        textEl.style.color = '#856404';
+        textEl.innerHTML = '⏳ 翻译耗时较长，请耐心等待...';
       }
     }, 8000);
 
