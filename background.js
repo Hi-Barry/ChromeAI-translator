@@ -465,17 +465,17 @@ function injectBuiltInTranslate(text, targetLang) {
         );
       } catch (e) {
         const msg = e.message || '未知错误';
+        // 如果 availability 没有确认为已就绪，任何 create 失败都指向缺包
+        if (availabilityStatus !== 'readily' && availabilityStatus !== 'available') {
+          return {
+            error: '离线翻译语言包未安装。请在扩展设置页点击「安装语言包」下载。\n\n' +
+                   '或直接访问：chrome://on-device-translation-internals/'
+          };
+        }
         // 区分超时和其他错误
         if (msg.includes('超时') || msg.includes('timeout')) {
           return {
-            error: '翻译器初始化超时。离线翻译语言包可能未安装，\n请在扩展设置页点击「安装语言包」下载。\n\n' +
-                   '或访问：chrome://on-device-translation-internals/'
-          };
-        }
-        if (msg.includes('download') || msg.includes('Download') || msg.includes('not ready')) {
-          return {
-            error: '离线翻译语言包未安装。请在扩展设置页点击「安装语言包」下载。\n\n' +
-                   '或访问：chrome://on-device-translation-internals/'
+            error: '翻译器初始化超时，请重试'
           };
         }
         return {
