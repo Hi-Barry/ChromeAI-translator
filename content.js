@@ -14,6 +14,8 @@ if (window.translatorContentScriptLoaded) {
   let currentPopup = null;
   // 防抖定时器
   let mouseUpTimer = null;
+  // 加载超时定时器
+  let loadingTimer = null;
 
   // 用户偏好配置（从 chrome.storage.sync 加载）
   let userConfig = {
@@ -188,6 +190,10 @@ if (window.translatorContentScriptLoaded) {
       clearTimeout(mouseUpTimer);
       mouseUpTimer = null;
     }
+    if (loadingTimer !== null) {
+      clearTimeout(loadingTimer);
+      loadingTimer = null;
+    }
     selectedText = '';
     document.removeEventListener('click', handleOutsideClick);
   }
@@ -212,6 +218,18 @@ if (window.translatorContentScriptLoaded) {
 
     document.body.appendChild(popup);
     currentPopup = popup;
+
+    // 8 秒加载超时提示（防止 "正在翻译..." 永久挂起）
+    loadingTimer = setTimeout(() => {
+      const textEl = popup.querySelector('.translated-text');
+      if (textEl && textEl.textContent === '正在翻译...') {
+        textEl.innerHTML = safeFormatText(
+          '⚠️ 翻译超时。离线语言包可能未安装。\n\n' +
+          '请点击扩展图标 → 选项 → 安装语言包'
+        );
+        textEl.style.color = '#856404';
+      }
+    }, 8000);
 
     const resizeHandle = popup.querySelector('#translator-resize-handle');
     if (resizeHandle) {
@@ -316,6 +334,11 @@ if (window.translatorContentScriptLoaded) {
   }
 
   function updateTranslationResult(translation) {
+    // 清除加载超时定时器
+    if (loadingTimer !== null) {
+      clearTimeout(loadingTimer);
+      loadingTimer = null;
+    }
     const popup = document.getElementById('ai-translator-popup');
     if (!popup) return;
 
@@ -326,6 +349,11 @@ if (window.translatorContentScriptLoaded) {
   }
 
   function showTranslationError(error) {
+    // 清除加载超时定时器
+    if (loadingTimer !== null) {
+      clearTimeout(loadingTimer);
+      loadingTimer = null;
+    }
     const popup = document.getElementById('ai-translator-popup');
     if (!popup) return;
 

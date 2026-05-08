@@ -34,6 +34,25 @@
         </div>
       </section>
 
+      <section class="section" id="langPackSection">
+        <h2>📦 离线翻译语言包</h2>
+        <div class="form-group">
+          <div id="langPackStatus" class="lang-pack-status">
+            <span id="langPackStatusIcon">⏳</span>
+            <span id="langPackStatusText">正在检测...</span>
+          </div>
+          <button id="installLangPackBtn" class="btn btn-primary" style="display:none;">
+            📥 安装语言包
+          </button>
+          <button id="checkLangPackBtn" class="btn btn-test" style="display:none;">
+            🔄 重新检测
+          </button>
+          <p class="help-text" id="langPackHint">
+            离线翻译需要安装 Google TranslateKit 语言包（一次性下载，之后完全离线使用）。
+          </p>
+        </div>
+      </section>
+
       <section class="section">
         <h2>API 配置</h2>
         <div class="form-group">

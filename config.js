@@ -5,7 +5,7 @@
 
 // ==================== 翻译模式枚举 ====================
 const TRANSLATION_MODE = {
-  LOCAL: 'local',     // Chrome 内置离线 AI 翻译（无需网络，完全本地）
+  LOCAL: 'local',     // Chrome 内置离线翻译 (TranslateKit，无需网络)
   REMOTE: 'remote'    // 远程大语言模型 API（需配置 API Key）
 };
 
@@ -72,13 +72,16 @@ const ERROR_MESSAGES = {
   'abort': '请求超时，请检查网络连接'
 };
 
+// Chrome 内置 AI 翻译（TranslateKit）相关配置
+// 语言包管理页面
+const ON_DEVICE_TRANSLATION_INTERNALS = 'chrome://on-device-translation-internals/';
+
 // Chrome 内置 AI 翻译相关错误消息
 const BUILTIN_AI_ERRORS = {
-  'API_NOT_AVAILABLE': 'Chrome 内置翻译 API 不可用。请确保：\n1) Chrome 版本 ≥ 131\n2) 已开启 chrome://flags/#translation-api 和 #language-detection-api',
-  'MODEL_NOT_READY': 'AI 翻译模型尚未下载完成。请稍等片刻后重试，首次下载需要联网。',
-  'DOWNLOAD_FAILED': 'AI 翻译模型下载失败，请检查网络连接后重试。',
+  'API_NOT_AVAILABLE': 'Chrome 内置翻译 API 不可用。请确保：\n1) Chrome 版本 ≥ 131\n2) 已开启 chrome://flags/#translation-api',
+  'PACK_NOT_INSTALLED': '离线翻译语言包未安装。请在扩展设置页点击「安装语言包」下载。',
+  'TIMEOUT': '翻译超时，请重试',
   'EMPTY_RESULT': '翻译结果为空，请重试',
-  'NEED_USER_ACTIVATION': '首次使用需通过快捷键（Ctrl+Shift+T）或选中文本触发，以激活 AI 模型下载。',
   'UNSUPPORTED_LANGUAGE': '当前目标语言暂不支持离线翻译'
 };
 
@@ -182,6 +185,7 @@ async function loadConfig() {
 if (typeof window !== 'undefined') {
   window.TRANSLATION_MODE = TRANSLATION_MODE;
   window.BUILTIN_AI_LANG_MAP = BUILTIN_AI_LANG_MAP;
+  window.ON_DEVICE_TRANSLATION_INTERNALS = ON_DEVICE_TRANSLATION_INTERNALS;
   window.DEFAULT_CONFIG = DEFAULT_CONFIG;
   window.THINKING_MODEL_PATTERNS = THINKING_MODEL_PATTERNS;
   window.ERROR_MESSAGES = ERROR_MESSAGES;

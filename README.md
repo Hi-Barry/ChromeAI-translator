@@ -160,11 +160,15 @@ Content Script  ──►  Service Worker  ──►  OpenAI 兼容 API (HTTPS)
 
 ## 📝 使用示例
 
-### 离线翻译
-1. 确保 Chrome flags 已开启
-2. 选择翻译模式为"Chrome 离线翻译"
-3. 选中网页文本，翻译弹窗自动出现
-4. 首次使用会下载翻译模型（一次性，约1分钟）
+### 离线翻译（首次需要下载语言包）
+
+1. 打开 `chrome://flags/#translation-api`，设为 **Enabled**，重启 Chrome
+2. 打开扩展设置页，在「离线翻译语言包」区域查看状态
+3. 如显示"语言包未安装"，点击 **📥 安装语言包** 按钮
+4. 在打开的 `chrome://on-device-translation-internals/` 页面搜索 `zh` 和 `en`，安装对应语言包
+5. 安装完成后回到设置页，应显示"语言包已安装，可离线使用"
+6. 选择翻译模式为"Chrome 离线翻译"
+7. 选中网页文本，翻译结果 1-2 秒返回（后续完全离线使用）
 
 ### 远程 LLM 翻译
 1. 配置 API 密钥和模型
@@ -210,6 +214,14 @@ Content Script  ──►  Service Worker  ──►  OpenAI 兼容 API (HTTPS)
 3. 重新设置快捷键
 
 ## 📋 更新日志
+
+### v1.5.0 (2026-05-08)
+
+- ⏱️ **超时防护**：`Translator.create()` 增加 10 秒超时，`translate()` 增加 15 秒超时，彻底解决「正在翻译...」永久挂起
+- 🔍 **语言包检测**：设置页新增「离线翻译语言包」区域，实时检测 `Translator.availability()` 状态
+- 📥 **一键安装**：提供「安装语言包」按钮，直接跳转 `chrome://on-device-translation-internals/`
+- 💬 **友好提示**：翻译超时自动显示错误提示，引导用户安装语言包
+- 📖 **更新文档**：添加首次离线翻译配置步骤
 
 ### v1.4.0 (2026-05-08)
 

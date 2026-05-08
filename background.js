@@ -379,71 +379,116 @@ function injectBuiltInTranslate(text, targetLang) {
     return null;
   }
 
-  // 这里不能用 async/await 直接返回值，因为 executeScript 的 func 需要是同步或返回 Promise
-  // 使用立即执行的 async 函数并返回 Promise
+  // 带超时的 Promise 包装
+  function withTimeout(promise, ms, errorMessage) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(errorMessage)), ms))
+    ]);
+  }
+
   return (async () => {
     try {
-      // 检查 API 可用性
+      // 1. 检查 API 可用性
       const TranslatorAPI = getTranslatorAPI();
       if (!TranslatorAPI) {
         return {
-          error: 'Chrome 内置 AI 翻译 API 不可用。请确保：\n1) Chrome 版本 ≥ 131\n2) 已开启 chrome://flags/#translation-api 和 #language-detection-api\n3) 非无痕模式'
+          error: 'Chrome 内置翻译 API 不可用。请确保：\n1) Chrome 版本 ≥ 131\n2) 已开启 chrome://flags/#translation-api\n3) 非无痕模式'
         };
       }
 
-      // 尝试检测源语言
+      // 2. 检测源语言（5 秒超时）
       let sourceLang = null;
       const DetectorAPI = getLanguageDetectorAPI();
       if (DetectorAPI) {
         try {
-          const detector = await DetectorAPI.create();
-          const results = await detector.detect(text);
+          const detector = await withTimeout(DetectorAPI.create(), 5000, '语言检测超时');
+          const results = await withTimeout(detector.detect(text), 3000, '语言检测超时');
           if (results && results.length > 0 && results[0].confidence > 0.5) {
             sourceLang = results[0].detectedLanguage;
-            // 如果检测结果与目标语言相同，可能是误判，不指定源语言
             if (sourceLang === targetLang) {
-              sourceLang = null;
+              sourceLang = null; // 同语言，不指定源语言
             }
           }
         } catch (e) {
-          // 语言检测失败，使用不指定源语言的模式
-          console.warn('[Built-in AI] Language detection failed:', e.message);
+          console.warn('[Built-in AI] Language detection failed, using default:', e.message);
         }
       }
 
-      // 检查模型可用性（可选的前置检查）
-      if (TranslatorAPI.availability && sourceLang) {
+      const detectedSource = sourceLang || 'en';
+
+      // 3. 检查语言包可用性（5 秒超时）
+      let availabilityStatus = 'unknown';
+      if (TranslatorAPI.availability) {
         try {
-          const status = await TranslatorAPI.availability({
-            sourceLanguage: sourceLang,
-            targetLanguage: targetLang
-          });
-          if (status === 'unavailable') {
-            return {
-              error: '当前语言对 (' + sourceLang + ' → ' + targetLang + ') 的翻译模型不可用'
-            };
-          }
+          const status = await withTimeout(
+            TranslatorAPI.availability({
+              sourceLanguage: detectedSource,
+              targetLanguage: targetLang
+            }),
+            5000,
+            '可用性检测超时'
+          );
+          availabilityStatus = status;
+          console.log('[Built-in AI] availability:', detectedSource, '→', targetLang, '=', status);
         } catch (e) {
-          // availability() 可能不被旧版 API 支持，忽略
+          console.warn('[Built-in AI] availability check failed:', e.message);
         }
       }
 
-      // 创建翻译器（sourceLanguage 必填，语言检测失败时默认 'en'）
+      // 4. 根据状态决定下一步
+      if (availabilityStatus === 'readily' || availabilityStatus === 'available') {
+        // 模型已就绪，继续翻译
+      } else if (availabilityStatus === 'after-download' || availabilityStatus === 'downloadable') {
+        return {
+          error: '离线翻译语言包未安装。请在扩展设置页点击「安装语言包」下载。\n\n' +
+                 '或直接访问：chrome://on-device-translation-internals/\n' +
+                 '搜索 ' + detectedSource + ' 和 ' + targetLang + ' 并安装对应语言包。'
+        };
+      } else if (availabilityStatus === 'unavailable') {
+        return {
+          error: '语言对 (' + detectedSource + ' → ' + targetLang + ') 暂不支持离线翻译'
+        };
+      }
+      // 如果 availability() 不支持（旧版 API），直接尝试创建
+
+      // 5. 创建翻译器（10 秒超时，这是关键：防止永久挂起）
       let translator;
       try {
-        const createOptions = {
-          sourceLanguage: sourceLang || 'en',
-          targetLanguage: targetLang
-        };
-        translator = await TranslatorAPI.create(createOptions);
+        translator = await withTimeout(
+          TranslatorAPI.create({
+            sourceLanguage: detectedSource,
+            targetLanguage: targetLang
+          }),
+          10000,
+          '翻译器初始化超时'
+        );
       } catch (e) {
+        const msg = e.message || '未知错误';
+        // 区分超时和其他错误
+        if (msg.includes('超时') || msg.includes('timeout')) {
+          return {
+            error: '翻译器初始化超时。离线翻译语言包可能未安装，\n请在扩展设置页点击「安装语言包」下载。\n\n' +
+                   '或访问：chrome://on-device-translation-internals/'
+          };
+        }
+        if (msg.includes('download') || msg.includes('Download') || msg.includes('not ready')) {
+          return {
+            error: '离线翻译语言包未安装。请在扩展设置页点击「安装语言包」下载。\n\n' +
+                   '或访问：chrome://on-device-translation-internals/'
+          };
+        }
         return {
-          error: '创建翻译器失败：' + (e.message || '未知错误') + '。首次使用需要联网下载翻译模型。'
+          error: '创建翻译器失败：' + msg
         };
       }
 
-      // 执行翻译
-      const result = await translator.translate(text);
+      // 6. 执行翻译（15 秒超时）
+      const result = await withTimeout(
+        translator.translate(text),
+        15000,
+        '翻译执行超时'
+      );
 
       if (!result || result.trim() === '') {
         return { error: '翻译结果为空，请重试' };

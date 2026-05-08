@@ -28,7 +28,13 @@ const elements = {
   modeLocal: document.getElementById('modeLocal'),
   modeRemote: document.getElementById('modeRemote'),
   modeHint: document.getElementById('modeHint'),
-  builtInAIStatus: document.getElementById('builtInAIStatus')
+  builtInAIStatus: document.getElementById('builtInAIStatus'),
+  // 语言包相关
+  langPackStatusIcon: document.getElementById('langPackStatusIcon'),
+  langPackStatusText: document.getElementById('langPackStatusText'),
+  installLangPackBtn: document.getElementById('installLangPackBtn'),
+  checkLangPackBtn: document.getElementById('checkLangPackBtn'),
+  langPackHint: document.getElementById('langPackHint')
 };
 
 // ==================== Range 滑块实时预览 ====================
@@ -77,26 +83,103 @@ function showStatus(message, type = 'success') {
   }, 4000);
 }
 
-// ==================== Chrome 内置 AI 可用性检测 ====================
+// ==================== Chrome 内置 AI 和语言包状态检测 ====================
 
 /**
- * 直接在设置页面检测 window.Translator 是否可用
- * 不通过 background / executeScript 注入，避免扩展内部页面权限问题
+ * 检测 Chrome 内置翻译 API 和语言包状态
+ */
+async function checkLanguagePackStatus() {
+  elements.langPackStatusIcon.textContent = '⏳';
+  elements.langPackStatusText.textContent = '正在检测...';
+  elements.installLangPackBtn.style.display = 'none';
+  elements.checkLangPackBtn.style.display = 'none';
+
+  // 1. 检查 API 是否可用
+  const hasNew = typeof window.Translator !== 'undefined' && typeof window.Translator.create === 'function';
+  const hasOld = !!(window.ai?.translator?.create);
+  const TranslatorAPI = hasNew ? window.Translator : (hasOld ? window.ai.translator : null);
+
+  if (!TranslatorAPI) {
+    elements.langPackStatusIcon.textContent = '❌';
+    elements.langPackStatusText.textContent = 'Chrome 内置翻译 API 不可用';
+    elements.langPackHint.textContent = '请确保：1) Chrome 版本 ≥ 131  2) 已开启 chrome://flags/#translation-api';
+    return;
+  }
+
+  elements.langPackStatusIcon.textContent = '✅';
+  elements.langPackStatusText.textContent = 'API 已就绪';
+
+  // 2. 检查语言包状态
+  if (!TranslatorAPI.availability) {
+    elements.langPackStatusText.textContent = 'API 已就绪（无法检测语言包状态，旧版 API）';
+    elements.langPackHint.textContent = '如果翻译一直卡住，请尝试访问 chrome://on-device-translation-internals/ 手动安装。';
+    elements.installLangPackBtn.style.display = 'inline-block';
+    return;
+  }
+
+  try {
+    const targetLang = elements.targetLanguage.value;
+    const targetBCP = mapToBuiltInAILanguage(targetLang);
+
+    const status = await TranslatorAPI.availability({
+      sourceLanguage: 'en',
+      targetLanguage: targetBCP
+    });
+
+    if (status === 'readily' || status === 'available') {
+      elements.langPackStatusIcon.textContent = '✅';
+      elements.langPackStatusText.textContent = '语言包已安装 (en ↔ ' + targetBCP + ')，可离线使用';
+      elements.langPackHint.textContent = '翻译模型已就绪，选中文本即可离线翻译。';
+      elements.installLangPackBtn.style.display = 'none';
+    } else if (status === 'after-download' || status === 'downloadable') {
+      elements.langPackStatusIcon.textContent = '📥';
+      elements.langPackStatusText.textContent = '语言包未安装 (en ↔ ' + targetBCP + ')，需要下载';
+      elements.langPackHint.textContent = '首次使用需下载语言包（约200MB，一次性），之后永久离线使用。';
+      elements.installLangPackBtn.style.display = 'inline-block';
+    } else if (status === 'unavailable') {
+      elements.langPackStatusIcon.textContent = '⚠️';
+      elements.langPackStatusText.textContent = '语言对 (en ↔ ' + targetBCP + ') 暂不支持';
+      elements.langPackHint.textContent = '当前语言对暂无离线翻译包支持。';
+    } else {
+      elements.langPackStatusIcon.textContent = '❓';
+      elements.langPackStatusText.textContent = '未知状态: ' + status;
+      elements.installLangPackBtn.style.display = 'inline-block';
+    }
+  } catch (e) {
+    elements.langPackStatusIcon.textContent = '⚠️';
+    elements.langPackStatusText.textContent = '检测失败: ' + e.message;
+    elements.langPackHint.textContent = '请尝试手动访问 chrome://on-device-translation-internals/ 查看语言包状态。';
+    elements.installLangPackBtn.style.display = 'inline-block';
+  }
+
+  elements.checkLangPackBtn.style.display = 'inline-block';
+}
+
+/**
+ * 打开语言包安装页面
+ */
+function installLanguagePack() {
+  chrome.tabs.create({ url: 'chrome://on-device-translation-internals/' });
+}
+
+/**
+ * 检查 API 基本可用性（轻量版，页面加载时运行）
  */
 function checkBuiltInAIAvailability() {
   const hasNew = typeof window.Translator !== 'undefined' && typeof window.Translator.create === 'function';
   const hasOld = !!(window.ai?.translator?.create);
 
-  if (hasNew) {
-    showBuiltInAIStatus('available', '✅ Chrome 内置 AI 翻译可用 (Translator API, Chrome 138+)');
-  } else if (hasOld) {
-    showBuiltInAIStatus('available', '✅ Chrome 内置 AI 翻译可用 (self.ai.translator, 实验阶段)');
+  if (hasNew || hasOld) {
+    showBuiltInAIStatus('available', '✅ Chrome 内置翻译 API 可用');
+    // 进一步检测语言包
+    checkLanguagePackStatus();
   } else {
     showBuiltInAIStatus('unavailable',
-      '⚠️ Chrome 内置 AI 翻译不可用。请确保：\n' +
+      '⚠️ Chrome 内置翻译 API 不可用。请确保：\n' +
       '1) Chrome 版本 ≥ 131\n' +
-      '2) 已开启 chrome://flags/#translation-api\n' +
-      '3) 已开启 chrome://flags/#language-detection-api');
+      '2) 已开启 chrome://flags/#translation-api');
+    elements.langPackStatusIcon.textContent = '❌';
+    elements.langPackStatusText.textContent = 'API 不可用，无法检测语言包';
   }
 }
 
@@ -284,10 +367,22 @@ elements.resetBtn.addEventListener('click', resetConfig);
 elements.testBtn.addEventListener('click', testApiConnection);
 elements.model.addEventListener('change', toggleCustomModelInput);
 
+// 语言包相关事件
+elements.installLangPackBtn.addEventListener('click', installLanguagePack);
+elements.checkLangPackBtn.addEventListener('click', checkLanguagePackStatus);
+
+// 目标语言切换时重新检测语言包
+elements.targetLanguage.addEventListener('change', () => {
+  if (elements.modeLocal.checked) {
+    checkLanguagePackStatus();
+  }
+});
+
 // 翻译模式切换联动
 elements.modeLocal.addEventListener('change', () => {
   if (elements.modeLocal.checked) {
     updateModeHint(elements.apiKey.value);
+    checkLanguagePackStatus();
   }
 });
 
