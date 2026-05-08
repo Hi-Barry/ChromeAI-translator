@@ -397,7 +397,7 @@ function injectBuiltInTranslate(text, targetLang) {
         };
       }
 
-      // 2. 检测源语言（5 秒超时）
+      // 2. 检测源语言（可选，非必须）
       let sourceLang = null;
       const DetectorAPI = getLanguageDetectorAPI();
       if (DetectorAPI) {
@@ -406,53 +406,15 @@ function injectBuiltInTranslate(text, targetLang) {
           const results = await withTimeout(detector.detect(text), 3000, '语言检测超时');
           if (results && results.length > 0 && results[0].confidence > 0.5) {
             sourceLang = results[0].detectedLanguage;
-            if (sourceLang === targetLang) {
-              sourceLang = null; // 同语言，不指定源语言
-            }
           }
         } catch (e) {
-          console.warn('[Built-in AI] Language detection failed, using default:', e.message);
+          // 检测失败不影响后续流程
         }
       }
 
-      const detectedSource = (sourceLang || 'en').split('-')[0];  // 取基础语种码，'en-US' → 'en'
+      const detectedSource = (sourceLang || 'en').split('-')[0];
 
-      // 3. 检查语言包可用性（5 秒超时）
-      let availabilityStatus = 'unknown';
-      if (TranslatorAPI.availability) {
-        try {
-          const status = await withTimeout(
-            TranslatorAPI.availability({
-              sourceLanguage: detectedSource,
-              targetLanguage: targetLang
-            }),
-            5000,
-            '可用性检测超时'
-          );
-          availabilityStatus = status;
-          console.log('[Built-in AI] availability:', detectedSource, '→', targetLang, '=', status);
-        } catch (e) {
-          console.warn('[Built-in AI] availability check failed:', e.message);
-        }
-      }
-
-      // 4. 根据状态决定下一步
-      if (availabilityStatus === 'readily' || availabilityStatus === 'available') {
-        // 模型已就绪，继续翻译
-      } else if (availabilityStatus === 'after-download' || availabilityStatus === 'downloadable') {
-        return {
-          error: '离线翻译语言包未安装。请在扩展设置页点击「安装语言包」下载。\n\n' +
-                 '或直接访问：chrome://on-device-translation-internals/\n' +
-                 '搜索 ' + detectedSource + ' 和 ' + targetLang + ' 并安装对应语言包。'
-        };
-      } else if (availabilityStatus === 'unavailable') {
-        return {
-          error: '语言对 (' + detectedSource + ' → ' + targetLang + ') 暂不支持离线翻译'
-        };
-      }
-      // 如果 availability() 不支持（旧版 API），直接尝试创建
-
-      // 5. 创建翻译器（10 秒超时，模型可能被 Chrome 卸载需重试）
+      // 3. 先尝试 create（真相来源），失败后再查 availability 做诊断
       let translator;
       try {
         translator = await withTimeout(
@@ -460,38 +422,47 @@ function injectBuiltInTranslate(text, targetLang) {
             sourceLanguage: detectedSource,
             targetLanguage: targetLang
           }),
-          10000,
+          15000,
           '翻译器初始化超时'
         );
-      } catch (e) {
-        // 如果模型确认已就绪，失败可能是 Chrome 卸载了模型 → 重试一次
-        const isReady = availabilityStatus === 'readily' || availabilityStatus === 'available';
-        if (isReady) {
+      } catch (createErr) {
+        // create 失败 → 查 availability 诊断原因
+        let diagnosis = 'unknown';
+        if (TranslatorAPI.availability) {
           try {
-            await new Promise(r => setTimeout(r, 500));
-            translator = await withTimeout(
-              TranslatorAPI.create({
+            diagnosis = await withTimeout(
+              TranslatorAPI.availability({
                 sourceLanguage: detectedSource,
                 targetLanguage: targetLang
               }),
-              10000,
-              '翻译器初始化超时'
+              5000,
+              '可用性检测超时'
             );
-          } catch (e2) {
-            return {
-              error: '创建翻译器失败：' + (e2.message || '未知错误') + '。翻译模型可能已被卸载，请重试。'
-            };
+          } catch (e) {
+            diagnosis = 'check_failed';
           }
-        } else {
-          // 未确认就绪，指向缺包
+        }
+
+        if (diagnosis === 'after-download' || diagnosis === 'downloadable') {
           return {
             error: '离线翻译语言包未安装。请在扩展设置页点击「安装语言包」下载。\n\n' +
                    '或直接访问：chrome://on-device-translation-internals/'
           };
         }
+        if (diagnosis === 'unavailable') {
+          return {
+            error: '语言对 (' + detectedSource + ' → ' + targetLang + ') 暂不支持离线翻译'
+          };
+        }
+        // readily / available / unknown / check_failed → 包可能损坏
+        return {
+          error: '离线翻译失败，语言包可能损坏或未正确安装。\n\n' +
+                 '请访问 chrome://on-device-translation-internals/ 重新安装 ' +
+                 detectedSource + ' ↔ ' + targetLang + ' 语言包。'
+        };
       }
 
-      // 6. 执行翻译（15 秒超时）
+      // 4. 执行翻译（15 秒超时）
       const result = await withTimeout(
         translator.translate(text),
         15000,
