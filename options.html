@@ -20,8 +20,8 @@
           <div class="radio-group" id="translationModeGroup">
             <label class="radio-label">
               <input type="radio" name="translationMode" value="local" id="modeLocal">
-              <span class="radio-title">🌐 本地翻译（Google）</span>
-              <span class="radio-desc">使用 Google 免费翻译服务，无需 API 密钥，需联网</span>
+              <span class="radio-title">📦 Chrome 离线翻译（内置 AI）</span>
+              <span class="radio-desc">使用 Chrome 内置 AI 翻译模型，无需联网，翻译完全在本地设备上进行</span>
             </label>
             <label class="radio-label">
               <input type="radio" name="translationMode" value="remote" id="modeRemote">
@@ -29,7 +29,8 @@
               <span class="radio-desc">使用 OpenAI 兼容 API 的大语言模型进行翻译，需配置 API 密钥</span>
             </label>
           </div>
-          <p class="help-text" id="modeHint">选择翻译方式。未配置 API 密钥时将自动使用本地翻译。</p>
+          <div id="builtInAIStatus" class="builtin-ai-status" style="display:none;"></div>
+          <p class="help-text" id="modeHint">选择翻译方式。未配置 API 密钥时将自动使用离线翻译。</p>
         </div>
       </section>
 

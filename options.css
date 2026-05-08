@@ -315,6 +315,34 @@ body {
   margin-top: 12px;
 }
 
+/* ==================== Chrome 内置 AI 状态指示 ==================== */
+.builtin-ai-status {
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+.builtin-ai-available {
+  background: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.builtin-ai-unavailable {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.builtin-ai-warning {
+  background: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
 /* ==================== Checkbox ==================== */
 .form-group-checkbox {
   margin-top: -8px;

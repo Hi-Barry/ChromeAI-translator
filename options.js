@@ -27,7 +27,8 @@ const elements = {
   // 翻译模式相关
   modeLocal: document.getElementById('modeLocal'),
   modeRemote: document.getElementById('modeRemote'),
-  modeHint: document.getElementById('modeHint')
+  modeHint: document.getElementById('modeHint'),
+  builtInAIStatus: document.getElementById('builtInAIStatus')
 };
 
 // ==================== Range 滑块实时预览 ====================
@@ -73,7 +74,42 @@ function showStatus(message, type = 'success') {
   
   setTimeout(() => {
     elements.status.style.display = 'none';
-  }, 3000);
+  }, 4000);
+}
+
+// ==================== Chrome 内置 AI 可用性检测 ====================
+
+async function checkBuiltInAIAvailability() {
+  try {
+    // 获取当前标签页来执行检测
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) {
+      showBuiltInAIStatus('warning', '⚠️ 无法检测 AI 可用性（无活动标签页）');
+      return;
+    }
+
+    const response = await chrome.runtime.sendMessage({
+      action: 'checkBuiltInAI',
+      tabId: tab.id
+    });
+
+    if (response?.available) {
+      const nsText = response.namespace || '';
+      const detectorText = response.languageDetector ? ' ✅ 语言检测' : '';
+      showBuiltInAIStatus('available', `✅ Chrome 内置 AI 翻译可用 (${nsText})${detectorText}`);
+    } else {
+      const errorMsg = response?.error || 'API 不可用';
+      showBuiltInAIStatus('unavailable', `⚠️ 内置 AI 翻译不可用：${errorMsg}`);
+    }
+  } catch (error) {
+    showBuiltInAIStatus('unavailable', `⚠️ 检测失败：${error.message}`);
+  }
+}
+
+function showBuiltInAIStatus(type, message) {
+  elements.builtInAIStatus.style.display = 'block';
+  elements.builtInAIStatus.textContent = message;
+  elements.builtInAIStatus.className = `builtin-ai-status builtin-ai-${type}`;
 }
 
 // ==================== 配置加载 ====================
@@ -236,13 +272,13 @@ function updateModeHint(apiKey) {
   const hasKey = apiKey && apiKey.trim() !== '';
 
   if (isLocal) {
-    elements.modeHint.textContent = '✅ 当前使用 Google 免费翻译，无需 API 密钥。选择远程翻译可启用大语言模型翻译。';
+    elements.modeHint.textContent = '✅ 当前使用 Chrome 内置离线 AI 翻译，无需联网，无需 API 密钥。首次使用需下载翻译模型。';
     elements.modeHint.className = 'help-text';
   } else if (!hasKey) {
-    elements.modeHint.textContent = '⚠️ 当前未配置 API 密钥，将自动降级为本地翻译（Google）。请在下方的 API 配置区域填写密钥。';
+    elements.modeHint.textContent = '⚠️ 当前未配置 API 密钥，将自动降级为 Chrome 内置离线 AI 翻译。请在下方的 API 配置区域填写密钥以启用 LLM 翻译。';
     elements.modeHint.className = 'help-text';
   } else {
-    elements.modeHint.textContent = '✅ 已配置 API 密钥，将使用大语言模型进行翻译。切换到本地翻译可节省 API 配额。';
+    elements.modeHint.textContent = '✅ 已配置 API 密钥，将使用大语言模型进行翻译。切换到离线翻译可保护隐私、无需联网。';
     elements.modeHint.className = 'help-text';
   }
 }
@@ -276,6 +312,8 @@ elements.apiKey.addEventListener('input', () => {
 document.addEventListener('DOMContentLoaded', () => {
   loadConfig();
   initPresetUrls();
+  // 延迟检测内置 AI 可用性（等 DOM 渲染完成）
+  setTimeout(checkBuiltInAIAvailability, 500);
 });
 
 console.log('[AI Translator] Options page loaded');

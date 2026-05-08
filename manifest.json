@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "AI翻译助手",
-  "version": "1.3.0",
-  "description": "使用AI大语言模型翻译选中的文本，支持OpenAI API兼容的模型",
+  "version": "1.4.0",
+  "description": "支持 Chrome 内置离线 AI 翻译和 OpenAI 兼容大语言模型翻译",
   "icons": {
     "16": "icons/icon-16.png",
     "48": "icons/icon-48.png",

@@ -5,12 +5,23 @@
 
 // ==================== 翻译模式枚举 ====================
 const TRANSLATION_MODE = {
-  LOCAL: 'local',     // Google 免费翻译 API（无需 Key，需联网）
+  LOCAL: 'local',     // Chrome 内置离线 AI 翻译（无需网络，完全本地）
   REMOTE: 'remote'    // 远程大语言模型 API（需配置 API Key）
 };
 
-// ==================== Google 翻译 API 配置 ====================
-const GOOGLE_TRANSLATE_API = 'https://translate.googleapis.com/translate_a/single';
+// ==================== Chrome 内置 AI 翻译语言码映射 ====================
+// 将用户配置的语种代码（zh-CN 等）转换为内置 AI 使用的 BCP 47 短码
+const BUILTIN_AI_LANG_MAP = {
+  'zh-CN': 'zh',
+  'zh-TW': 'zh-Hant',
+  'en': 'en',
+  'ja': 'ja',
+  'ko': 'ko',
+  'fr': 'fr',
+  'de': 'de',
+  'es': 'es',
+  'ru': 'ru'
+};
 
 // 默认配置
 const DEFAULT_CONFIG = {
@@ -61,11 +72,14 @@ const ERROR_MESSAGES = {
   'abort': '请求超时，请检查网络连接'
 };
 
-// Google 翻译相关错误消息
-const GOOGLE_TRANSLATE_ERRORS = {
-  'NETWORK_ERROR': '无法连接到 Google 翻译服务，请检查网络',
+// Chrome 内置 AI 翻译相关错误消息
+const BUILTIN_AI_ERRORS = {
+  'API_NOT_AVAILABLE': 'Chrome 内置翻译 API 不可用。请确保：\n1) Chrome 版本 ≥ 131\n2) 已开启 chrome://flags/#translation-api 和 #language-detection-api',
+  'MODEL_NOT_READY': 'AI 翻译模型尚未下载完成。请稍等片刻后重试，首次下载需要联网。',
+  'DOWNLOAD_FAILED': 'AI 翻译模型下载失败，请检查网络连接后重试。',
   'EMPTY_RESULT': '翻译结果为空，请重试',
-  'PARSE_ERROR': '翻译结果解析失败'
+  'NEED_USER_ACTIVATION': '首次使用需通过快捷键（Ctrl+Shift+T）或选中文本触发，以激活 AI 模型下载。',
+  'UNSUPPORTED_LANGUAGE': '当前目标语言暂不支持离线翻译'
 };
 
 /**
@@ -105,6 +119,19 @@ function detectProvider(apiBaseUrl) {
   if (url.includes('anthropic')) return 'anthropic';
   if (url.includes('deepseek')) return 'deepseek';
   return 'openai-compatible';
+}
+
+/**
+ * 将用户配置的语种代码映射为 Chrome 内置 AI 的 BCP 47 短码
+ * @param {string} langCode - 用户配置的语种（如 'zh-CN', 'en'）
+ * @returns {string} BCP 47 短码（如 'zh', 'en'）
+ */
+function mapToBuiltInAILanguage(langCode) {
+  const mapped = BUILTIN_AI_LANG_MAP[langCode];
+  if (mapped) return mapped;
+  // 尝试取连字符前的部分
+  const base = langCode.split('-')[0];
+  return base || 'zh';
 }
 
 /**
@@ -154,14 +181,15 @@ async function loadConfig() {
 // 导出配置（由于 Chrome Extension 不支持 ES Module，使用全局变量）
 if (typeof window !== 'undefined') {
   window.TRANSLATION_MODE = TRANSLATION_MODE;
-  window.GOOGLE_TRANSLATE_API = GOOGLE_TRANSLATE_API;
+  window.BUILTIN_AI_LANG_MAP = BUILTIN_AI_LANG_MAP;
   window.DEFAULT_CONFIG = DEFAULT_CONFIG;
   window.THINKING_MODEL_PATTERNS = THINKING_MODEL_PATTERNS;
   window.ERROR_MESSAGES = ERROR_MESSAGES;
-  window.GOOGLE_TRANSLATE_ERRORS = GOOGLE_TRANSLATE_ERRORS;
+  window.BUILTIN_AI_ERRORS = BUILTIN_AI_ERRORS;
   window.getFriendlyErrorMessage = getFriendlyErrorMessage;
   window.modelSupportsThinking = modelSupportsThinking;
   window.detectProvider = detectProvider;
+  window.mapToBuiltInAILanguage = mapToBuiltInAILanguage;
   window.getEffectiveMode = getEffectiveMode;
   window.loadConfig = loadConfig;
 }
