@@ -442,11 +442,10 @@ function injectBuiltInTranslate(text, targetLang) {
         }
 
         // 2. 构建 create() 参数
-        //    关键修复：不指定 sourceLanguage，让 API 自动检测源语言。
-        //    这样避免了：
-        //    - LanguageDetector 检测不准导致 source=target 同语言翻译失败
-        //    - 额外的 LanguageDetector 调用消耗 user activation 时间窗口
+        //    sourceLanguage 是必填参数（Chrome 138+ 要求必填）。
+        //    默认 'en' 覆盖绝大多数翻译场景（用户翻译英文内容）。
         var createOptions = {
+          sourceLanguage: 'en',
           targetLanguage: targetLang
         };
 
@@ -454,7 +453,7 @@ function injectBuiltInTranslate(text, targetLang) {
         var translator;
         var createErr = null;
         try {
-          console.log('[Built-in AI] Calling Translator.create({ targetLanguage: "' + targetLang + '" })');
+          console.log('[Built-in AI] Calling Translator.create({ sourceLanguage: "en", targetLanguage: "' + targetLang + '" })');
           translator = await withTimeout(
             TranslatorAPI.create(createOptions),
             TIMEOUTS.TRANSLATOR_CREATE,
@@ -486,7 +485,10 @@ function injectBuiltInTranslate(text, targetLang) {
         if (TranslatorAPI.availability) {
           try {
             diagnosis = await withTimeout(
-              TranslatorAPI.availability({ targetLanguage: targetLang }),
+              TranslatorAPI.availability({
+                sourceLanguage: 'en',
+                targetLanguage: targetLang
+              }),
               TIMEOUTS.AVAILABILITY_CHECK,
               '可用性检测超时'
             );
