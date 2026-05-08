@@ -428,29 +428,18 @@ function injectBuiltInTranslate(text, targetLang) {
         }
       }
 
-      // 创建翻译器
+      // 创建翻译器（sourceLanguage 必填，语言检测失败时默认 'en'）
       let translator;
       try {
-        const createOptions = { targetLanguage: targetLang };
-        if (sourceLang) {
-          createOptions.sourceLanguage = sourceLang;
-        }
+        const createOptions = {
+          sourceLanguage: sourceLang || 'en',
+          targetLanguage: targetLang
+        };
         translator = await TranslatorAPI.create(createOptions);
       } catch (e) {
-        // 如果指定 sourceLanguage 失败，尝试不指定源语言
-        if (sourceLang) {
-          try {
-            translator = await TranslatorAPI.create({ targetLanguage: targetLang });
-          } catch (e2) {
-            return {
-              error: '创建翻译器失败：' + (e2.message || '未知错误') + '。首次使用需要联网下载翻译模型。'
-            };
-          }
-        } else {
-          return {
-            error: '创建翻译器失败：' + (e.message || '未知错误') + '。首次使用需要联网下载翻译模型。'
-          };
-        }
+        return {
+          error: '创建翻译器失败：' + (e.message || '未知错误') + '。首次使用需要联网下载翻译模型。'
+        };
       }
 
       // 执行翻译
@@ -533,50 +522,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
   }
-
-  if (request.action === 'checkBuiltInAI') {
-    checkBuiltInAIAvailability(sender.tab?.id)
-      .then(result => sendResponse(result))
-      .catch(error => sendResponse({ available: false, error: error.message }));
-    return true;
-  }
 });
-
-/**
- * 检查 Chrome 内置 AI 翻译 API 在当前页面是否可用
- * 供 options.js 在设置页检测并给出提示
- */
-async function checkBuiltInAIAvailability(tabId) {
-  if (!tabId) {
-    return { available: false, error: '无法获取页面' };
-  }
-
-  return new Promise((resolve) => {
-    chrome.scripting.executeScript(
-      {
-        target: { tabId },
-        world: 'MAIN',
-        func: () => {
-          const hasNew = typeof window.Translator !== 'undefined' && !!window.Translator.create;
-          const hasOld = !!(window.ai?.translator?.create);
-          const hasDetector = typeof window.LanguageDetector !== 'undefined' || !!(window.ai?.languageDetector);
-          return {
-            available: hasNew || hasOld,
-            namespace: hasNew ? 'Translator (Chrome 138+)' : (hasOld ? 'self.ai.translator (experimental)' : 'none'),
-            languageDetector: hasDetector
-          };
-        }
-      },
-      (results) => {
-        if (chrome.runtime.lastError || !results?.[0]?.result) {
-          resolve({ available: false, error: chrome.runtime.lastError?.message || '检测失败' });
-        } else {
-          resolve(results[0].result);
-        }
-      }
-    );
-  });
-}
 
 /**
  * 处理翻译请求

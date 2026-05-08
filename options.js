@@ -79,30 +79,24 @@ function showStatus(message, type = 'success') {
 
 // ==================== Chrome 内置 AI 可用性检测 ====================
 
-async function checkBuiltInAIAvailability() {
-  try {
-    // 获取当前标签页来执行检测
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) {
-      showBuiltInAIStatus('warning', '⚠️ 无法检测 AI 可用性（无活动标签页）');
-      return;
-    }
+/**
+ * 直接在设置页面检测 window.Translator 是否可用
+ * 不通过 background / executeScript 注入，避免扩展内部页面权限问题
+ */
+function checkBuiltInAIAvailability() {
+  const hasNew = typeof window.Translator !== 'undefined' && typeof window.Translator.create === 'function';
+  const hasOld = !!(window.ai?.translator?.create);
 
-    const response = await chrome.runtime.sendMessage({
-      action: 'checkBuiltInAI',
-      tabId: tab.id
-    });
-
-    if (response?.available) {
-      const nsText = response.namespace || '';
-      const detectorText = response.languageDetector ? ' ✅ 语言检测' : '';
-      showBuiltInAIStatus('available', `✅ Chrome 内置 AI 翻译可用 (${nsText})${detectorText}`);
-    } else {
-      const errorMsg = response?.error || 'API 不可用';
-      showBuiltInAIStatus('unavailable', `⚠️ 内置 AI 翻译不可用：${errorMsg}`);
-    }
-  } catch (error) {
-    showBuiltInAIStatus('unavailable', `⚠️ 检测失败：${error.message}`);
+  if (hasNew) {
+    showBuiltInAIStatus('available', '✅ Chrome 内置 AI 翻译可用 (Translator API, Chrome 138+)');
+  } else if (hasOld) {
+    showBuiltInAIStatus('available', '✅ Chrome 内置 AI 翻译可用 (self.ai.translator, 实验阶段)');
+  } else {
+    showBuiltInAIStatus('unavailable',
+      '⚠️ Chrome 内置 AI 翻译不可用。请确保：\n' +
+      '1) Chrome 版本 ≥ 131\n' +
+      '2) 已开启 chrome://flags/#translation-api\n' +
+      '3) 已开启 chrome://flags/#language-detection-api');
   }
 }
 
