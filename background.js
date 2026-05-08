@@ -415,7 +415,7 @@ function injectBuiltInTranslate(text, targetLang) {
         }
       }
 
-      const detectedSource = sourceLang || 'en';
+      const detectedSource = (sourceLang || 'en').split('-')[0];  // 取基础语种码，'en-US' → 'en'
 
       // 3. 检查语言包可用性（5 秒超时）
       let availabilityStatus = 'unknown';
