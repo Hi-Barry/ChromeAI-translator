@@ -240,7 +240,82 @@ body {
   border: 1px solid #bee5eb;
 }
 
-/* Checkbox */
+/* ==================== 翻译模式切换（Radio 卡片组） ==================== */
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.radio-label {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px 14px 44px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: #fafafa;
+  user-select: none;
+}
+
+.radio-label:hover {
+  border-color: #667eea;
+  background: #f5f7ff;
+}
+
+.radio-label input[type="radio"] {
+  position: absolute;
+  left: 14px;
+  top: 18px;
+  width: 18px;
+  height: 18px;
+  accent-color: #667eea;
+  margin: 0;
+  cursor: pointer;
+}
+
+.radio-label input[type="radio"]:checked ~ .radio-title {
+  color: #667eea;
+}
+
+.radio-label:has(input[type="radio"]:checked) {
+  border-color: #667eea;
+  background: #f0f4ff;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.radio-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #444;
+  margin-bottom: 3px;
+  transition: color 0.2s;
+}
+
+.radio-desc {
+  font-size: 12px;
+  color: #888;
+  line-height: 1.4;
+}
+
+.radio-label input[type="radio"]:checked ~ .radio-desc {
+  color: #666;
+}
+
+/* 模式切换提示（增强高亮） */
+#modeHint {
+  font-size: 13px;
+  color: #667eea;
+  font-weight: 500;
+  padding: 8px 12px;
+  background: #f0f4ff;
+  border-radius: 6px;
+  margin-top: 12px;
+}
+
+/* ==================== Checkbox ==================== */
 .form-group-checkbox {
   margin-top: -8px;
 }

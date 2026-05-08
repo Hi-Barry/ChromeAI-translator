@@ -296,6 +296,106 @@ async function translateWithAPI(text, config) {
 }
 
 /**
+ * 使用 Google 免费翻译 API 进行翻译
+ * 无需 API Key，使用 translate.googleapis.com 的公开接口
+ * 
+ * @param {string} text - 要翻译的文本
+ * @param {string} targetLanguage - 目标语言代码（如 'zh-CN', 'en'）
+ * @returns {Promise<string>} 翻译后的文本
+ */
+async function translateWithGoogle(text, targetLanguage) {
+  if (!text || text.trim() === '') {
+    throw new Error('翻译文本不能为空');
+  }
+
+  // Google Translate API 使用的语言代码映射
+  const langMap = {
+    'zh-CN': 'zh-CN',
+    'zh-TW': 'zh-TW',
+    'en': 'en',
+    'ja': 'ja',
+    'ko': 'ko',
+    'fr': 'fr',
+    'de': 'de',
+    'es': 'es',
+    'pt': 'pt',
+    'ru': 'ru',
+    'ar': 'ar',
+    'th': 'th',
+    'vi': 'vi',
+    'id': 'id',
+    'ms': 'ms',
+    'tl': 'tl',
+    'hi': 'hi',
+    'bn': 'bn',
+    'it': 'it',
+    'nl': 'nl',
+    'pl': 'pl',
+    'tr': 'tr',
+    'uk': 'uk'
+  };
+
+  const target = langMap[targetLanguage] || 'zh-CN';
+  const encodedText = encodeURIComponent(text);
+  const url = `${GOOGLE_TRANSLATE_API}?client=gtx&sl=auto&tl=${target}&dt=t&q=${encodedText}`;
+
+  console.log('[AI Translator] Google Translate request:', {
+    url: url.substring(0, 120) + '...',
+    textLength: text.length,
+    targetLanguage: target
+  });
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Google 翻译服务返回错误: HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // 解析 Google Translate API 返回的 JSON 格式
+    // 格式: [[["翻译结果","原文",null,null,1]], ...]
+    if (!Array.isArray(data) || !Array.isArray(data[0])) {
+      console.error('[AI Translator] Invalid Google Translate response:', data);
+      throw new Error(GOOGLE_TRANSLATE_ERRORS.PARSE_ERROR);
+    }
+
+    // 拼接多个句子片段
+    const translatedParts = data[0]
+      .filter(part => Array.isArray(part) && part[0])
+      .map(part => part[0]);
+
+    if (translatedParts.length === 0) {
+      throw new Error(GOOGLE_TRANSLATE_ERRORS.EMPTY_RESULT);
+    }
+
+    return translatedParts.join('').trim();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    
+    if (error.name === 'AbortError') {
+      throw new Error(GOOGLE_TRANSLATE_ERRORS.NETWORK_ERROR);
+    }
+    
+    // 网络错误（如 DNS 解析失败、连接被拒绝等）
+    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.message.includes('ERR_')) {
+      throw new Error(GOOGLE_TRANSLATE_ERRORS.NETWORK_ERROR);
+    }
+    
+    throw error;
+  }
+}
+
+/**
  * 测试API连接
  */
 async function testConnection(config) {
@@ -340,7 +440,11 @@ async function testConnection(config) {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'translate') {
     handleTranslation(request.text, sender.tab?.id)
-      .then(result => sendResponse({ success: true, translation: result }))
+      .then(result => sendResponse({
+        success: true,
+        translation: result.translation,
+        mode: result.mode
+      }))
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true; // 保持消息通道开放
   }
@@ -355,10 +459,28 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 /**
  * 处理翻译请求
+ * 根据实际生效的翻译模式路由到 Google 本地翻译或远程 LLM 翻译
+ * 返回 { translation, mode } 以便下游（如 content.js 缓存）区分模式
  */
 async function handleTranslation(text, tabId) {
   const config = await loadConfig();
-  return await translateWithAPI(text, config);
+  const effectiveMode = getEffectiveMode(config);
+
+  console.log('[AI Translator] Translation request:', {
+    textLength: text.length,
+    effectiveMode,
+    userMode: config.translationMode,
+    hasApiKey: !!(config.apiKey && config.apiKey.trim() !== '')
+  });
+
+  let translation;
+  if (effectiveMode === TRANSLATION_MODE.LOCAL) {
+    translation = await translateWithGoogle(text, config.targetLanguage);
+  } else {
+    translation = await translateWithAPI(text, config);
+  }
+
+  return { translation, mode: effectiveMode };
 }
 
 // 监听快捷键命令

@@ -3,8 +3,19 @@
  * 避免 DEFAULT_CONFIG 在多个文件中重复定义
  */
 
+// ==================== 翻译模式枚举 ====================
+const TRANSLATION_MODE = {
+  LOCAL: 'local',     // Google 免费翻译 API（无需 Key，需联网）
+  REMOTE: 'remote'    // 远程大语言模型 API（需配置 API Key）
+};
+
+// ==================== Google 翻译 API 配置 ====================
+const GOOGLE_TRANSLATE_API = 'https://translate.googleapis.com/translate_a/single';
+
 // 默认配置
 const DEFAULT_CONFIG = {
+  // 翻译模式：用户首选模式，实际使用请调用 getEffectiveMode()
+  translationMode: TRANSLATION_MODE.REMOTE,
   apiKey: '',
   apiBaseUrl: 'https://api.openai.com/v1',
   model: 'gpt-4o-mini',
@@ -50,6 +61,13 @@ const ERROR_MESSAGES = {
   'abort': '请求超时，请检查网络连接'
 };
 
+// Google 翻译相关错误消息
+const GOOGLE_TRANSLATE_ERRORS = {
+  'NETWORK_ERROR': '无法连接到 Google 翻译服务，请检查网络',
+  'EMPTY_RESULT': '翻译结果为空，请重试',
+  'PARSE_ERROR': '翻译结果解析失败'
+};
+
 /**
  * 获取用户友好的错误消息
  */
@@ -90,6 +108,36 @@ function detectProvider(apiBaseUrl) {
 }
 
 /**
+ * 获取实际生效的翻译模式
+ * 
+ * 规则：
+ * 1. 如果用户选择的模式是 LOCAL → 直接使用 LOCAL
+ * 2. 如果用户选择的模式是 REMOTE 但未配置 API Key → 自动降级为 LOCAL
+ * 3. 如果用户选择的模式是 REMOTE 且已配置 API Key → 使用 REMOTE
+ * 
+ * @param {Object} config - 用户配置（含 apiKey 和 translationMode）
+ * @returns {string} TRANSLATION_MODE.LOCAL 或 TRANSLATION_MODE.REMOTE
+ */
+function getEffectiveMode(config) {
+  if (!config) {
+    return TRANSLATION_MODE.LOCAL;
+  }
+
+  // 用户选择了本地模式 → 直接本地
+  if (config.translationMode === TRANSLATION_MODE.LOCAL) {
+    return TRANSLATION_MODE.LOCAL;
+  }
+
+  // 用户选择了远程模式，但未配置 API Key → 自动降级
+  if (!config.apiKey || config.apiKey.trim() === '') {
+    return TRANSLATION_MODE.LOCAL;
+  }
+
+  // 用户选择了远程模式且已配置 Key
+  return TRANSLATION_MODE.REMOTE;
+}
+
+/**
  * 从 chrome.storage.sync 获取完整配置（合并默认值）
  * 在 content script 和 background script 中均可使用
  */
@@ -105,11 +153,15 @@ async function loadConfig() {
 
 // 导出配置（由于 Chrome Extension 不支持 ES Module，使用全局变量）
 if (typeof window !== 'undefined') {
+  window.TRANSLATION_MODE = TRANSLATION_MODE;
+  window.GOOGLE_TRANSLATE_API = GOOGLE_TRANSLATE_API;
   window.DEFAULT_CONFIG = DEFAULT_CONFIG;
   window.THINKING_MODEL_PATTERNS = THINKING_MODEL_PATTERNS;
   window.ERROR_MESSAGES = ERROR_MESSAGES;
+  window.GOOGLE_TRANSLATE_ERRORS = GOOGLE_TRANSLATE_ERRORS;
   window.getFriendlyErrorMessage = getFriendlyErrorMessage;
   window.modelSupportsThinking = modelSupportsThinking;
   window.detectProvider = detectProvider;
+  window.getEffectiveMode = getEffectiveMode;
   window.loadConfig = loadConfig;
 }

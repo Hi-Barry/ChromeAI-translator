@@ -15,6 +15,25 @@
 
     <main class="main">
       <section class="section">
+        <h2>翻译模式</h2>
+        <div class="form-group">
+          <div class="radio-group" id="translationModeGroup">
+            <label class="radio-label">
+              <input type="radio" name="translationMode" value="local" id="modeLocal">
+              <span class="radio-title">🌐 本地翻译（Google）</span>
+              <span class="radio-desc">使用 Google 免费翻译服务，无需 API 密钥，需联网</span>
+            </label>
+            <label class="radio-label">
+              <input type="radio" name="translationMode" value="remote" id="modeRemote">
+              <span class="radio-title">🤖 远程翻译（大语言模型）</span>
+              <span class="radio-desc">使用 OpenAI 兼容 API 的大语言模型进行翻译，需配置 API 密钥</span>
+            </label>
+          </div>
+          <p class="help-text" id="modeHint">选择翻译方式。未配置 API 密钥时将自动使用本地翻译。</p>
+        </div>
+      </section>
+
+      <section class="section">
         <h2>API 配置</h2>
         <div class="form-group">
           <label for="apiKey">API 密钥</label>

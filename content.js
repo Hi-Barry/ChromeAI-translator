@@ -27,19 +27,35 @@ if (window.translatorContentScriptLoaded) {
   const MAX_CACHE_SIZE = 100;
   const translationCache = new Map();
 
+  // 缓存的 effective mode（从最近一次翻译请求更新）
+  let cachedEffectiveMode = TRANSLATION_MODE.REMOTE;
+
+  /**
+   * 生成包含翻译模式的缓存键，避免本地/远程翻译结果互相污染
+   */
+  function getCacheKey(text, mode) {
+    // 如果没有传入 mode，使用最后一次已知的 mode
+    const m = mode || cachedEffectiveMode || TRANSLATION_MODE.REMOTE;
+    return `${text}|${m}`;
+  }
+
   function setCache(key, value) {
-    if (translationCache.has(key)) {
-      translationCache.delete(key);
+    // key 可以是 string（完整缓存键）或 { text, mode } 对象
+    const cacheKey = typeof key === 'string' ? key : getCacheKey(key.text, key.mode);
+    if (translationCache.has(cacheKey)) {
+      translationCache.delete(cacheKey);
     }
     if (translationCache.size >= MAX_CACHE_SIZE) {
       const firstKey = translationCache.keys().next().value;
       translationCache.delete(firstKey);
     }
-    translationCache.set(key, value);
+    translationCache.set(cacheKey, value);
   }
 
   function getCache(key) {
-    return translationCache.get(key);
+    // key 可以是 string（完整缓存键）或 { text, mode } 对象
+    const cacheKey = typeof key === 'string' ? key : getCacheKey(key.text, key.mode);
+    return translationCache.get(cacheKey);
   }
 
   // ==================== 弹窗尺寸管理 ====================
@@ -279,21 +295,24 @@ if (window.translatorContentScriptLoaded) {
 
   // ==================== 翻译请求 ====================
   async function requestTranslation(text) {
-    try {
-      const response = await chrome.runtime.sendMessage({
-        action: 'translate',
-        text: text
-      });
+    const response = await chrome.runtime.sendMessage({
+      action: 'translate',
+      text: text
+    });
 
-      if (response.success === false) {
-        throw new Error(response.error);
-      }
-
-      return response.translation;
-    } catch (error) {
-      console.error('[AI Translator] Translation error:', error);
-      throw error;
+    if (response.success === false) {
+      throw new Error(response.error);
     }
+
+    // 更新缓存的 effective mode（从 background 响应中获取，避免污染）
+    if (response.mode) {
+      cachedEffectiveMode = response.mode;
+    }
+
+    return {
+      translation: response.translation,
+      mode: response.mode || cachedEffectiveMode
+    };
   }
 
   function updateTranslationResult(translation) {
@@ -342,6 +361,7 @@ if (window.translatorContentScriptLoaded) {
       selectedText = text;
       console.log('[AI Translator] Selected text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''));
 
+      localStorage.removeItem('ai-translator-clear-cache');
       const cachedResult = getCache(text);
       if (cachedResult) {
         console.log('[AI Translator] Cache hit');
@@ -353,8 +373,8 @@ if (window.translatorContentScriptLoaded) {
       createTranslatorPopup(text);
 
       requestTranslation(text)
-        .then(translation => {
-          setCache(text, translation);
+        .then(({ translation, mode }) => {
+          setCache({ text, mode }, translation);
           updateTranslationResult(translation);
         })
         .catch(error => {
@@ -387,14 +407,16 @@ if (window.translatorContentScriptLoaded) {
 
         createTranslatorPopup(text);
         requestTranslation(text)
-          .then(translation => {
-            setCache(text, translation);
+          .then(({ translation, mode }) => {
+            setCache({ text, mode }, translation);
             updateTranslationResult(translation);
+            sendResponse({ success: true, translation, mode });
           })
           .catch(error => {
             showTranslationError(error);
+            sendResponse({ success: false, error: error.message });
           });
-        sendResponse({ success: true });
+        return true; // keep channel open for async response
       } else {
         sendResponse({ success: false, error: 'No text selected' });
       }

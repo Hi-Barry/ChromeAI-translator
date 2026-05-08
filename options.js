@@ -23,7 +23,11 @@ const elements = {
   testBtn: document.getElementById('testBtn'),
   saveBtn: document.getElementById('saveBtn'),
   resetBtn: document.getElementById('resetBtn'),
-  status: document.getElementById('status')
+  status: document.getElementById('status'),
+  // 翻译模式相关
+  modeLocal: document.getElementById('modeLocal'),
+  modeRemote: document.getElementById('modeRemote'),
+  modeHint: document.getElementById('modeHint')
 };
 
 // ==================== Range 滑块实时预览 ====================
@@ -86,6 +90,15 @@ async function loadConfig() {
     elements.systemPrompt.value = config.systemPrompt || DEFAULT_CONFIG.systemPrompt;
     elements.disableThinking.checked = config.disableThinking !== undefined ? config.disableThinking : DEFAULT_CONFIG.disableThinking;
     
+    // 翻译模式
+    const mode = config.translationMode || DEFAULT_CONFIG.translationMode;
+    if (mode === TRANSLATION_MODE.LOCAL) {
+      elements.modeLocal.checked = true;
+    } else {
+      elements.modeRemote.checked = true;
+    }
+    updateModeHint(config.apiKey || '');
+
     // 界面设置
     elements.fontSize.value = config.fontSize || DEFAULT_CONFIG.fontSize;
     elements.fontSizeValue.textContent = (config.fontSize || DEFAULT_CONFIG.fontSize) + 'px';
@@ -109,7 +122,10 @@ async function loadConfig() {
 // ==================== 配置保存 ====================
 
 async function saveConfig() {
+  const translationMode = elements.modeLocal.checked ? TRANSLATION_MODE.LOCAL : TRANSLATION_MODE.REMOTE;
+
   const config = {
+    translationMode: translationMode,
     apiKey: elements.apiKey.value.trim(),
     apiBaseUrl: elements.apiBaseUrl.value.trim() || DEFAULT_CONFIG.apiBaseUrl,
     model: elements.model.value,
@@ -123,17 +139,19 @@ async function saveConfig() {
     popupBorderWidth: parseInt(elements.popupBorderWidth.value, 10)
   };
 
-  // 验证API密钥
-  if (!config.apiKey) {
-    showStatus('请输入API密钥', 'error');
-    elements.apiKey.focus();
-    return;
+  // 本地模式不需要 API Key
+  if (translationMode === TRANSLATION_MODE.REMOTE) {
+    if (!config.apiKey) {
+      showStatus('远程翻译模式需要配置 API 密钥', 'error');
+      elements.apiKey.focus();
+      return;
+    }
   }
 
   try {
     await chrome.storage.sync.set(config);
     showStatus('设置已保存！', 'success');
-    console.log('[AI Translator] Config saved');
+    console.log('[AI Translator] Config saved, translationMode:', translationMode);
   } catch (error) {
     console.error('[AI Translator] Failed to save config:', error);
     showStatus('保存失败: ' + error.message, 'error');
@@ -209,12 +227,50 @@ async function testApiConnection() {
   }
 }
 
+/**
+ * 更新翻译模式提示信息
+ * 根据当前选择的模式和 API Key 状态显示相应提示
+ */
+function updateModeHint(apiKey) {
+  const isLocal = elements.modeLocal.checked;
+  const hasKey = apiKey && apiKey.trim() !== '';
+
+  if (isLocal) {
+    elements.modeHint.textContent = '✅ 当前使用 Google 免费翻译，无需 API 密钥。选择远程翻译可启用大语言模型翻译。';
+    elements.modeHint.className = 'help-text';
+  } else if (!hasKey) {
+    elements.modeHint.textContent = '⚠️ 当前未配置 API 密钥，将自动降级为本地翻译（Google）。请在下方的 API 配置区域填写密钥。';
+    elements.modeHint.className = 'help-text';
+  } else {
+    elements.modeHint.textContent = '✅ 已配置 API 密钥，将使用大语言模型进行翻译。切换到本地翻译可节省 API 配额。';
+    elements.modeHint.className = 'help-text';
+  }
+}
+
 // ==================== 事件监听 ====================
 
 elements.saveBtn.addEventListener('click', saveConfig);
 elements.resetBtn.addEventListener('click', resetConfig);
 elements.testBtn.addEventListener('click', testApiConnection);
 elements.model.addEventListener('change', toggleCustomModelInput);
+
+// 翻译模式切换联动
+elements.modeLocal.addEventListener('change', () => {
+  if (elements.modeLocal.checked) {
+    updateModeHint(elements.apiKey.value);
+  }
+});
+
+elements.modeRemote.addEventListener('change', () => {
+  if (elements.modeRemote.checked) {
+    updateModeHint(elements.apiKey.value);
+  }
+});
+
+// API Key 输入时实时更新提示
+elements.apiKey.addEventListener('input', () => {
+  updateModeHint(elements.apiKey.value);
+});
 
 // 页面加载时读取配置
 document.addEventListener('DOMContentLoaded', () => {
