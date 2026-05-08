@@ -76,13 +76,23 @@ const ERROR_MESSAGES = {
 // 语言包管理页面
 const ON_DEVICE_TRANSLATION_INTERNALS = 'chrome://on-device-translation-internals/';
 
+// 超时配置（毫秒）
+const BUILTIN_AI_TIMEOUTS = {
+  DETECTOR_CREATE: 5000,      // LanguageDetector 初始化超时
+  DETECTOR_DETECT: 3000,      // 语言检测超时
+  TRANSLATOR_CREATE: 30000,   // Translator 初始化超时（首次需加载模型到内存，可能 20-30 秒）
+  TRANSLATOR_EXECUTE: 30000,  // 翻译执行超时
+  AVAILABILITY_CHECK: 5000    // availability 检查超时
+};
+
 // Chrome 内置 AI 翻译相关错误消息
 const BUILTIN_AI_ERRORS = {
   'API_NOT_AVAILABLE': 'Chrome 内置翻译 API 不可用。请确保：\n1) Chrome 版本 ≥ 131\n2) 已开启 chrome://flags/#translation-api',
   'PACK_NOT_INSTALLED': '离线翻译语言包未安装。请在扩展设置页点击「安装语言包」下载。',
   'TIMEOUT': '翻译超时，请重试',
   'EMPTY_RESULT': '翻译结果为空，请重试',
-  'UNSUPPORTED_LANGUAGE': '当前目标语言暂不支持离线翻译'
+  'UNSUPPORTED_LANGUAGE': '当前目标语言暂不支持离线翻译',
+  'USER_ACTIVATION': '需要用户交互。请先点击页面任意位置，再选中文本进行翻译。'
 };
 
 /**
@@ -186,6 +196,7 @@ if (typeof window !== 'undefined') {
   window.TRANSLATION_MODE = TRANSLATION_MODE;
   window.BUILTIN_AI_LANG_MAP = BUILTIN_AI_LANG_MAP;
   window.ON_DEVICE_TRANSLATION_INTERNALS = ON_DEVICE_TRANSLATION_INTERNALS;
+  window.BUILTIN_AI_TIMEOUTS = BUILTIN_AI_TIMEOUTS;
   window.DEFAULT_CONFIG = DEFAULT_CONFIG;
   window.THINKING_MODEL_PATTERNS = THINKING_MODEL_PATTERNS;
   window.ERROR_MESSAGES = ERROR_MESSAGES;

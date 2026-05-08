@@ -286,7 +286,7 @@ async function translateWithAPI(text, config) {
  * 使用 Chrome 内置 AI 进行离线翻译
  * 
  * 通过 chrome.scripting.executeScript 将翻译逻辑注入到页面的 MAIN world 中执行，
- * 因为 Translator / LanguageDetector API 仅在页面主世界（window 对象上）可用，
+ * 因为 Translator API 仅在页面主世界（window 对象上）可用，
  * 在 Service Worker 和 isolated content script 中不可用。
  * 
  * @param {string} text - 要翻译的文本
@@ -349,32 +349,28 @@ async function translateWithBuiltInAI(text, targetLanguage, tabId) {
  * 不能引用任何外部变量、闭包或扩展 API。
  * 
  * 支持两种 API 命名空间：
- *   - window.Translator / window.LanguageDetector（Chrome 138+ 正式 API）
- *   - window.ai.translator / window.ai.languageDetector（Chrome 131-137 实验阶段）
+ *   - window.Translator（Chrome 138+ 正式 API）
+ *   - window.ai.translator（Chrome 131-137 实验阶段）
  * 
  * @param {string} text - 要翻译的文本
  * @param {string} targetLang - BCP 47 目标语言码（如 'zh', 'en'）
  * @returns {{translation?: string, error?: string}}
  */
 function injectBuiltInTranslate(text, targetLang) {
+  // 内置超时常量（自包含，不依赖 config.js 的导出）
+  var TIMEOUTS = {
+    TRANSLATOR_CREATE: 30000,   // Translator 初始化超时
+    TRANSLATOR_EXECUTE: 30000,  // 翻译执行超时
+    AVAILABILITY_CHECK: 5000    // availability 检查超时
+  };
+
   // 获取 Translator API（兼容新旧命名空间）
   function getTranslatorAPI() {
-    if (typeof window.Translator !== 'undefined' && window.Translator.create) {
+    if (typeof window.Translator !== 'undefined' && typeof window.Translator.create === 'function') {
       return window.Translator;
     }
-    if (window.ai && window.ai.translator && window.ai.translator.create) {
+    if (window.ai && window.ai.translator && typeof window.ai.translator.create === 'function') {
       return window.ai.translator;
-    }
-    return null;
-  }
-
-  // 获取 LanguageDetector API（兼容新旧命名空间）
-  function getLanguageDetectorAPI() {
-    if (typeof window.LanguageDetector !== 'undefined' && window.LanguageDetector.create) {
-      return window.LanguageDetector;
-    }
-    if (window.ai && window.ai.languageDetector && window.ai.languageDetector.create) {
-      return window.ai.languageDetector;
     }
     return null;
   }
@@ -383,66 +379,124 @@ function injectBuiltInTranslate(text, targetLang) {
   function withTimeout(promise, ms, errorMessage) {
     return Promise.race([
       promise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error(errorMessage)), ms))
+      new Promise(function (_, reject) {
+        setTimeout(function () { reject(new Error(errorMessage)); }, ms);
+      })
     ]);
   }
 
-  return (async () => {
-    try {
-      // 1. 检查 API 可用性
-      const TranslatorAPI = getTranslatorAPI();
-      if (!TranslatorAPI) {
-        return {
-          error: 'Chrome 内置翻译 API 不可用。请确保：\n1) Chrome 版本 ≥ 131\n2) 已开启 chrome://flags/#translation-api\n3) 非无痕模式'
-        };
-      }
+  /**
+   * 格式化错误信息为人类可读的诊断报告
+   * @param {Error} err - create() 抛出的原始错误
+   * @param {string} diagnosis - availability 返回的诊断值
+   * @param {string} sourceLang - 检测到的源语言
+   * @returns {string} 格式化的错误消息
+   */
+  function formatDiagnosticError(err, diagnosis, sourceLang) {
+    var errName = err.name || 'Error';
+    var errMsg = err.message || '未知错误';
 
-      // 2. 检测源语言（可选，非必须）
-      let sourceLang = null;
-      const DetectorAPI = getLanguageDetectorAPI();
-      if (DetectorAPI) {
-        try {
-          const detector = await withTimeout(DetectorAPI.create(), 5000, '语言检测超时');
-          const results = await withTimeout(detector.detect(text), 3000, '语言检测超时');
-          if (results && results.length > 0 && results[0].confidence > 0.5) {
-            sourceLang = results[0].detectedLanguage;
-          }
-        } catch (e) {
-          // 检测失败不影响后续流程
-        }
-      }
+    var parts = [];
+    parts.push('离线翻译失败');
+    parts.push('');
+    parts.push('【技术诊断】');
+    parts.push('  API 状态 (availability): ' + diagnosis);
+    parts.push('  源语言: ' + sourceLang + ' → 目标语言: ' + targetLang);
+    parts.push('  错误类型: ' + errName);
+    parts.push('  错误详情: ' + errMsg);
 
-      const detectedSource = (sourceLang || 'en').split('-')[0];
+    // 常见错误类型给出针对性建议
+    if (errName === 'NotAllowedError' || errMsg.indexOf('user activation') !== -1 || errMsg.indexOf('gesture') !== -1) {
+      parts.push('');
+      parts.push('【可能原因】需要用户交互授权');
+      parts.push('  请先点击页面任意位置，再选中文本进行翻译。');
+    } else if (errName === 'NotReadableError') {
+      parts.push('');
+      parts.push('【可能原因】模型文件正在下载或已损坏');
+      parts.push('  请访问 chrome://on-device-translation-internals/ 重新安装语言包。');
+    } else if (diagnosis === 'readily' || diagnosis === 'available') {
+      parts.push('');
+      parts.push('【注意】语言包显示已安装（availability=' + diagnosis + '），但初始化失败。');
+      parts.push('  这通常是因为：');
+      parts.push('  1) 模型正在加载到内存中（首次使用需 20-30 秒）');
+      parts.push('  2) 需要在页面上有用户交互操作');
+      parts.push('  请稍等片刻后重试，或访问 chrome://on-device-translation-internals/ 检查。');
+    } else if (diagnosis === 'check_failed') {
+      parts.push('');
+      parts.push('【可能原因】无法检查语言包状态，API 可能未初始化完成');
+      parts.push('  请确保已开启 chrome://flags/#translation-api 并重启浏览器。');
+    }
 
-      // 3. 先尝试 create（真相来源），失败后再查 availability 做诊断
-      let translator;
+    return parts.join('\n');
+  }
+
+  return (function () {
+    return (async function () {
       try {
-        translator = await withTimeout(
-          TranslatorAPI.create({
-            sourceLanguage: detectedSource,
-            targetLanguage: targetLang
-          }),
-          15000,
-          '翻译器初始化超时'
-        );
-      } catch (createErr) {
-        // create 失败 → 查 availability 诊断原因
-        let diagnosis = 'unknown';
+        // 1. 检查 API 可用性
+        var TranslatorAPI = getTranslatorAPI();
+        if (!TranslatorAPI) {
+          return {
+            error: 'Chrome 内置翻译 API 不可用。请确保：\n1) Chrome 版本 ≥ 131\n2) 已开启 chrome://flags/#translation-api\n3) 非无痕模式'
+          };
+        }
+
+        // 2. 构建 create() 参数
+        //    关键修复：不指定 sourceLanguage，让 API 自动检测源语言。
+        //    这样避免了：
+        //    - LanguageDetector 检测不准导致 source=target 同语言翻译失败
+        //    - 额外的 LanguageDetector 调用消耗 user activation 时间窗口
+        var createOptions = {
+          targetLanguage: targetLang
+        };
+
+        // 3. 尝试 create()，带 monitor 回调跟踪下载进度
+        var translator;
+        var createErr = null;
+        try {
+          console.log('[Built-in AI] Calling Translator.create({ targetLanguage: "' + targetLang + '" })');
+          translator = await withTimeout(
+            TranslatorAPI.create(createOptions),
+            TIMEOUTS.TRANSLATOR_CREATE,
+            '翻译器初始化超时（' + (TIMEOUTS.TRANSLATOR_CREATE / 1000) + '秒）'
+          );
+        } catch (err) {
+          createErr = err;
+          console.error('[Built-in AI] Translator.create() failed:', err.name, err.message);
+        }
+
+        // 4. 如果 create() 成功，直接翻译
+        if (translator) {
+          console.log('[Built-in AI] Translator created, translating...');
+          var result = await withTimeout(
+            translator.translate(text),
+            TIMEOUTS.TRANSLATOR_EXECUTE,
+            '翻译执行超时（' + (TIMEOUTS.TRANSLATOR_EXECUTE / 1000) + '秒）'
+          );
+
+          if (!result || result.trim() === '') {
+            return { error: '翻译结果为空，请重试' };
+          }
+
+          return { translation: result.trim() };
+        }
+
+        // 5. create() 失败 → 查 availability 做诊断
+        var diagnosis = 'unknown';
         if (TranslatorAPI.availability) {
           try {
             diagnosis = await withTimeout(
-              TranslatorAPI.availability({
-                sourceLanguage: detectedSource,
-                targetLanguage: targetLang
-              }),
-              5000,
+              TranslatorAPI.availability({ targetLanguage: targetLang }),
+              TIMEOUTS.AVAILABILITY_CHECK,
               '可用性检测超时'
             );
           } catch (e) {
             diagnosis = 'check_failed';
+            console.error('[Built-in AI] availability check failed:', e.message);
           }
         }
 
+        // 6. 根据 diagnosis 给出精准错误
         if (diagnosis === 'after-download' || diagnosis === 'downloadable') {
           return {
             error: '离线翻译语言包未安装。请在扩展设置页点击「安装语言包」下载。\n\n' +
@@ -451,33 +505,20 @@ function injectBuiltInTranslate(text, targetLang) {
         }
         if (diagnosis === 'unavailable') {
           return {
-            error: '语言对 (' + detectedSource + ' → ' + targetLang + ') 暂不支持离线翻译'
+            error: '语言对 (auto → ' + targetLang + ') 暂不支持离线翻译'
           };
         }
-        // readily / available / unknown / check_failed → 包可能损坏
+
+        // readily / available / unknown / check_failed → 输出完整诊断报告
+        var sourceRef = 'auto';
         return {
-          error: '离线翻译失败，语言包可能损坏或未正确安装。\n\n' +
-                 '请访问 chrome://on-device-translation-internals/ 重新安装 ' +
-                 detectedSource + ' ↔ ' + targetLang + ' 语言包。'
+          error: formatDiagnosticError(createErr, diagnosis, sourceRef)
         };
+      } catch (error) {
+        console.error('[Built-in AI] Translation error:', error);
+        return { error: '翻译失败：' + (error.message || '未知错误') };
       }
-
-      // 4. 执行翻译（15 秒超时）
-      const result = await withTimeout(
-        translator.translate(text),
-        15000,
-        '翻译执行超时'
-      );
-
-      if (!result || result.trim() === '') {
-        return { error: '翻译结果为空，请重试' };
-      }
-
-      return { translation: result.trim() };
-    } catch (error) {
-      console.error('[Built-in AI] Translation error:', error);
-      return { error: '翻译失败：' + (error.message || '未知错误') };
-    }
+    })();
   })();
 }
 
